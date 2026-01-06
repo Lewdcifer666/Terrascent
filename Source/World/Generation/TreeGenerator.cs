@@ -8,10 +8,10 @@ public class TreeGenerator
     private readonly PerlinNoise _treeNoise;
 
     // Tree parameters - tuned for ~2-3 trees per chunk
-    public float TreeDensity { get; set; } = 0.25f;   // Increased significantly
+    public float TreeDensity { get; set; } = 0.55f;
     public int MinTreeHeight { get; set; } = 4;
     public int MaxTreeHeight { get; set; } = 12;
-    public int MinTreeSpacing { get; set; } = 6;      // ~4 trees max per 32-tile chunk
+    public int MinTreeSpacing { get; set; } = 6;
 
     public TreeGenerator(int seed)
     {
@@ -31,14 +31,16 @@ public class TreeGenerator
         if (slot != selectedSlot)
             return false;
 
-        // Use noise for natural variation (forests vs clearings)
-        float noise = _treeNoise.Noise01(worldX * 0.03f, 0);
+        // Use noise for slight natural variation, but keep it subtle
+        // Higher frequency = more local variation, less long empty stretches
+        float noise = _treeNoise.Noise01(worldX * 0.08f, 0);
 
-        // Always allow some trees, but more in "forest" areas
-        float localDensity = TreeDensity * (0.5f + noise);
+        // Minimum 60% of density always applies, noise adds up to 40% more
+        // This prevents long stretches without trees
+        float localDensity = TreeDensity * (0.6f + noise * 0.4f);
 
-        // Final random check
-        int rollHash = HashPosition(worldX * 7);
+        // Final random check using position hash
+        int rollHash = HashPosition(worldX * 7 + 12345);
         float roll = (rollHash % 1000) / 1000f;
 
         return roll < localDensity;

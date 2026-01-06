@@ -37,7 +37,6 @@
     <Folder Include="Content\Data\" />
     <Folder Include="Content\Sounds\" />
     <Folder Include="Content\Textures\" />
-    <Folder Include="Source\Entities\" />
     <Folder Include="Source\UI\" />
     <Folder Include="Source\Systems\" />
   </ItemGroup>

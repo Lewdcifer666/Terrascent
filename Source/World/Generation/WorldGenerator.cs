@@ -141,9 +141,20 @@ public class WorldGenerator
             }
         }
 
+        // Place a leaf cap at the very top of the trunk
+        int capLocalX = tree.TrunkX - chunkWorldX;
+        int capLocalY = (trunkTopY - 1) - chunkWorldY;
+        if (capLocalX >= 0 && capLocalX < Chunk.SIZE && capLocalY >= 0 && capLocalY < Chunk.SIZE)
+        {
+            ref var capTile = ref chunk.GetTile(capLocalX, capLocalY);
+            if (capTile.IsAir)
+            {
+                capTile = new Tile(TileType.Leaves);
+            }
+        }
+
         // Place canopy - starts overlapping with trunk top, extends upward
-        // Canopy center is above the trunk
-        int canopyBaseY = trunkTopY;  // Bottom of canopy at trunk top
+        int canopyBaseY = trunkTopY;
         int canopyTopY = canopyBaseY - tree.CanopyHeight;
 
         for (int worldY = canopyTopY; worldY <= canopyBaseY + 1; worldY++)
@@ -152,24 +163,21 @@ public class WorldGenerator
             if (localY < 0 || localY >= Chunk.SIZE)
                 continue;
 
-            // Calculate how far from top/bottom of canopy (0 = edge, 1 = center)
+            // Calculate how far from top/bottom of canopy
             float canopyProgress = (float)(worldY - canopyTopY) / (canopyBaseY - canopyTopY + 1);
 
             // Radius: small at top, wide in middle, tapers at bottom
             float radiusMultiplier;
             if (canopyProgress < 0.3f)
             {
-                // Top - small
                 radiusMultiplier = 0.4f + canopyProgress * 2f;
             }
             else if (canopyProgress < 0.7f)
             {
-                // Middle - full width
                 radiusMultiplier = 1.0f;
             }
             else
             {
-                // Bottom - taper
                 radiusMultiplier = 1.0f - (canopyProgress - 0.7f) * 1.5f;
             }
 
@@ -183,8 +191,8 @@ public class WorldGenerator
                 if (localX < 0 || localX >= Chunk.SIZE)
                     continue;
 
-                // Skip trunk column in lower part of canopy
-                if (dx == 0 && worldY >= canopyBaseY - 1)
+                // Skip trunk column EXCEPT at trunk top (allow leaf cap overlap)
+                if (dx == 0 && worldY > trunkTopY)
                     continue;
 
                 // Elliptical shape check
