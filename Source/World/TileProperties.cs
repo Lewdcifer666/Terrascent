@@ -121,6 +121,18 @@ public static class TileRegistry
             CanMerge = true,
         },
 
+        [TileType.Leaves] = new TileProperties
+        {
+            Name = "Leaves",
+            IsSolid = false,  // Can walk through leaves
+            BlocksLight = false,
+            MiningTime = 1,
+            PickaxeRequired = 0,
+            LightEmission = 0,
+            AffectedByGravity = false,
+            CanMerge = true,
+        },
+
         [TileType.Sand] = new TileProperties
         {
             Name = "Sand",

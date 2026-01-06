@@ -319,6 +319,7 @@ public class TerrascentGame : Game
             TileType.Dirt => new Color(139, 90, 43),
             TileType.Stone => new Color(128, 128, 128),
             TileType.Grass => new Color(34, 139, 34),
+            TileType.Leaves => new Color(34, 120, 34),  // Dark green for leaves
             TileType.Sand => new Color(238, 214, 175),
             TileType.CopperOre => new Color(184, 115, 51),
             TileType.IronOre => new Color(165, 142, 142),
