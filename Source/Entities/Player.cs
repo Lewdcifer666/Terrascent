@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 
 namespace Terrascent.Entities;
@@ -13,17 +14,20 @@ public class Player : Entity
     public float JumpForce { get; set; } = 350f;
     public float Acceleration { get; set; } = 1200f;
     public float Friction { get; set; } = 800f;
-    public float AirControl { get; set; } = 0.6f;  // Reduced control in air
+    public float AirControl { get; set; } = 0.6f;
 
     // Jump buffering and coyote time
     private float _jumpBufferTime = 0f;
     private float _coyoteTime = 0f;
-    private const float JUMP_BUFFER_DURATION = 0.1f;  // 100ms buffer
-    private const float COYOTE_DURATION = 0.1f;       // 100ms coyote time
+    private const float JUMP_BUFFER_DURATION = 0.15f;  // Increased to 150ms
+    private const float COYOTE_DURATION = 0.12f;       // Increased to 120ms
 
     // State
     public bool IsJumping { get; private set; }
-    public int FacingDirection { get; private set; } = 1;  // 1 = right, -1 = left
+    public int FacingDirection { get; private set; } = 1;
+
+    // Track if we were on ground last frame (for coyote time)
+    private bool _wasOnGround;
 
     public Player()
     {
@@ -90,20 +94,29 @@ public class Player : Entity
             }
         }
 
-        // Update coyote time
+        // Update coyote time - only start counting down when we LEAVE the ground
         if (OnGround)
         {
             _coyoteTime = COYOTE_DURATION;
             IsJumping = false;
         }
+        else if (_wasOnGround && !OnGround)
+        {
+            // Just left the ground - start coyote timer (but don't reset if already in air)
+            // _coyoteTime already has its value from being on ground
+        }
         else
         {
+            // In the air - count down
             _coyoteTime -= deltaTime;
         }
 
-        // Jump input buffering
-        if (input.IsKeyPressed(Microsoft.Xna.Framework.Input.Keys.Space) ||
-            input.IsKeyPressed(Microsoft.Xna.Framework.Input.Keys.W))
+        _wasOnGround = OnGround;
+
+        // Jump input buffering - check for jump press
+        bool jumpPressed = input.IsKeyPressed(Keys.Space) || input.IsKeyPressed(Keys.W);
+
+        if (jumpPressed)
         {
             _jumpBufferTime = JUMP_BUFFER_DURATION;
         }
@@ -112,8 +125,14 @@ public class Player : Entity
             _jumpBufferTime -= deltaTime;
         }
 
-        // Execute jump if buffered and can jump
-        if (_jumpBufferTime > 0 && _coyoteTime > 0 && !IsJumping)
+        // Execute jump if:
+        // 1. Jump was pressed recently (buffer > 0)
+        // 2. We can jump (on ground or in coyote time)
+        // 3. We're not already in an upward jump
+        bool canJump = _coyoteTime > 0 || OnGround;
+        bool notRising = Velocity.Y >= 0 || !IsJumping;
+
+        if (_jumpBufferTime > 0 && canJump && notRising)
         {
             Jump();
             _jumpBufferTime = 0;
@@ -121,9 +140,9 @@ public class Player : Entity
         }
 
         // Variable jump height - release early for shorter jump
-        if (IsJumping && Velocity.Y < 0 &&
-            !input.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Space) &&
-            !input.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.W))
+        bool jumpHeld = input.IsKeyDown(Keys.Space) || input.IsKeyDown(Keys.W);
+
+        if (IsJumping && Velocity.Y < 0 && !jumpHeld)
         {
             // Cut jump short
             Velocity = new Vector2(Velocity.X, Velocity.Y * 0.5f);
@@ -139,6 +158,25 @@ public class Player : Entity
         Velocity = new Vector2(Velocity.X, -JumpForce);
         IsJumping = true;
         OnGround = false;
+        _wasOnGround = false;
+    }
+
+    /// <summary>
+    /// Additional ground check - call after ApplyMovement.
+    /// </summary>
+    public void CheckGroundState(World.ChunkManager chunks)
+    {
+        // If we think we're not on ground, do an extra check
+        // This helps with corner cases
+        if (!OnGround && Velocity.Y >= 0)
+        {
+            // Check 1 pixel below our feet
+            Vector2 checkPos = new(Position.X, Position.Y + 1);
+            if (WouldCollide(checkPos, chunks))
+            {
+                OnGround = true;
+            }
+        }
     }
 
     /// <summary>
@@ -151,5 +189,10 @@ public class Player : Entity
             (surfaceY - 3) * World.WorldCoordinates.TILE_SIZE - Height
         );
         Velocity = Vector2.Zero;
+        OnGround = false;
+        _wasOnGround = false;
+        IsJumping = false;
+        _coyoteTime = 0;
+        _jumpBufferTime = 0;
     }
 }

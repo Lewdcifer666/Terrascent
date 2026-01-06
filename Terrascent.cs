@@ -142,6 +142,9 @@ public class TerrascentGame : Game
 
         // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
+
+        // Extra ground check for corner cases
+        _player.CheckGroundState(_chunkManager);
     }
 
     private void VariableUpdate(float deltaTime)

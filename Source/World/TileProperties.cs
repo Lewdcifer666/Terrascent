@@ -208,8 +208,8 @@ public static class TileRegistry
         [TileType.Wood] = new TileProperties
         {
             Name = "Wood",
-            IsSolid = true,
-            BlocksLight = true,
+            IsSolid = false,
+            BlocksLight = false,
             MiningTime = 45,
             PickaxeRequired = 0,
             LightEmission = 0,

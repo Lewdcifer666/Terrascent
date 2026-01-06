@@ -159,15 +159,25 @@ public abstract class Entity
     }
 
     /// <summary>
+    /// Check if there's solid ground directly below.
+    /// Used for edge cases in ground detection.
+    /// </summary>
+    protected bool CheckGroundBelow(World.ChunkManager chunks, float distance = 1f)
+    {
+        Vector2 checkPos = new(Position.X, Position.Y + distance);
+        return WouldCollide(checkPos, chunks);
+    }
+
+    /// <summary>
     /// Check if the entity would collide at a given position.
     /// </summary>
     protected bool WouldCollide(Vector2 position, World.ChunkManager chunks)
     {
-        // Get the tiles this hitbox overlaps
-        int left = (int)position.X / World.WorldCoordinates.TILE_SIZE;
-        int right = (int)(position.X + Width - 1) / World.WorldCoordinates.TILE_SIZE;
-        int top = (int)position.Y / World.WorldCoordinates.TILE_SIZE;
-        int bottom = (int)(position.Y + Height - 1) / World.WorldCoordinates.TILE_SIZE;
+        // Use Floor to handle negative coordinates correctly
+        int left = (int)MathF.Floor(position.X / World.WorldCoordinates.TILE_SIZE);
+        int right = (int)MathF.Floor((position.X + Width - 1) / World.WorldCoordinates.TILE_SIZE);
+        int top = (int)MathF.Floor(position.Y / World.WorldCoordinates.TILE_SIZE);
+        int bottom = (int)MathF.Floor((position.Y + Height - 1) / World.WorldCoordinates.TILE_SIZE);
 
         for (int y = top; y <= bottom; y++)
         {
