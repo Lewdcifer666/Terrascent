@@ -195,6 +195,10 @@ public class ChunkManager
                 if (!_chunks.ContainsKey(chunkPos))
                 {
                     var chunk = new Chunk(chunkPos);
+
+                    // GENERATE THE CHUNK - This was missing!
+                    Generator?.GenerateChunk(chunk);
+
                     _chunks[chunkPos] = chunk;
                     OnChunkLoaded?.Invoke(chunk);
                 }

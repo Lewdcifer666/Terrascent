@@ -57,6 +57,36 @@ public class TerrascentGame : Game
         // Create world generator
         _worldGenerator = new WorldGenerator(WORLD_SEED);
 
+        // === DEBUG: Test generation directly ===
+        System.Diagnostics.Debug.WriteLine("=== GENERATION DEBUG ===");
+
+        // Test surface height
+        int testSurfaceY = _worldGenerator.GetSurfaceHeight(0);
+        System.Diagnostics.Debug.WriteLine($"Surface at X=0: Y={testSurfaceY}");
+
+        // Create a test chunk and check its contents
+        var testChunk = new Chunk(0, 3); // Chunk at Y=3 should contain surface
+        _worldGenerator.GenerateChunk(testChunk);
+
+        int solidCount = 0;
+        int airCount = 0;
+        for (int y = 0; y < Chunk.SIZE; y++)
+        {
+            for (int x = 0; x < Chunk.SIZE; x++)
+            {
+                var tile = testChunk.GetTile(x, y);
+                if (tile.IsAir)
+                    airCount++;
+                else
+                    solidCount++;
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Test Chunk(0,3): Solid={solidCount}, Air={airCount}");
+        System.Diagnostics.Debug.WriteLine($"First tile: {testChunk.GetTile(0, 0).Type}");
+        System.Diagnostics.Debug.WriteLine($"Tile at 0,20: {testChunk.GetTile(0, 20).Type}");
+        System.Diagnostics.Debug.WriteLine("=== END DEBUG ===");
+
         // Create chunk manager with generator
         _chunkManager = new ChunkManager
         {
@@ -81,6 +111,7 @@ public class TerrascentGame : Game
         System.Diagnostics.Debug.WriteLine($"World Seed: {WORLD_SEED}");
         System.Diagnostics.Debug.WriteLine($"Spawn surface Y: {surfaceY}");
         System.Diagnostics.Debug.WriteLine($"Player spawn: {_playerPosition}");
+
 
         base.Initialize();
     }
@@ -216,6 +247,7 @@ public class TerrascentGame : Game
         );
 
         DrawTiles();
+        DrawChunkBorders();
         DrawRectangle(_playerPosition - new Vector2(12, 24), 24, 48, Color.CornflowerBlue);
 
         _spriteBatch.End();
@@ -226,6 +258,28 @@ public class TerrascentGame : Game
         _spriteBatch.End();
 
         base.Draw(gameTime);
+    }
+
+    private void DrawChunkBorders()
+    {
+        var visibleArea = _camera.VisibleArea;
+        var minChunk = WorldCoordinates.WorldToChunk(new Vector2(visibleArea.Left, visibleArea.Top));
+        var maxChunk = WorldCoordinates.WorldToChunk(new Vector2(visibleArea.Right, visibleArea.Bottom));
+
+        Color borderColor = new Color(255, 255, 255, 50);
+
+        for (int cy = minChunk.Y; cy <= maxChunk.Y; cy++)
+        {
+            for (int cx = minChunk.X; cx <= maxChunk.X; cx++)
+            {
+                var worldPos = WorldCoordinates.ChunkToWorld(new Point(cx, cy));
+                int size = CHUNK_SIZE * TILE_SIZE;
+
+                // Draw chunk border (top and left lines)
+                DrawRectangle(worldPos, size, 1, borderColor);  // Top
+                DrawRectangle(worldPos, 1, size, borderColor);  // Left
+            }
+        }
     }
 
     private void DrawTiles()

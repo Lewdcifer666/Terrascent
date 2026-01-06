@@ -21,7 +21,7 @@ public class WorldGenerator
     public int SurfaceLevel { get; set; } = 100;        // Base surface Y level (in tiles)
     public int TerrainHeight { get; set; } = 40;        // Max terrain variation
     public int DirtDepth { get; set; } = 8;             // Dirt layer thickness
-    public float CaveThreshold { get; set; } = 0.45f;   // Cave density (lower = more caves)
+    public float CaveThreshold { get; set; } = 0.35f;   // Cave density (lower = more caves)
 
     // Noise parameters
     public int TerrainOctaves { get; set; } = 6;
@@ -29,7 +29,7 @@ public class WorldGenerator
     public float TerrainPersistence { get; set; } = 0.5f;
 
     public int CaveOctaves { get; set; } = 4;
-    public float CaveFrequency { get; set; } = 0.05f;
+    public float CaveFrequency { get; set; } = 0.04f;
     public float CavePersistence { get; set; } = 0.5f;
 
     public WorldGenerator(int seed)
@@ -39,8 +39,8 @@ public class WorldGenerator
 
         // Create noise generators with different seeds
         _terrainNoise = new PerlinNoise(seed);
-        _caveNoise = new PerlinNoise(seed + 1);
-        _oreNoise = new PerlinNoise(seed + 2);
+        _caveNoise = new PerlinNoise(seed + 1000);  // More separation
+        _oreNoise = new PerlinNoise(seed + 2000);
     }
 
     /// <summary>
@@ -79,9 +79,12 @@ public class WorldGenerator
     /// </summary>
     public int GetSurfaceHeight(int worldX)
     {
-        // Use octave noise for natural-looking terrain
-        float noise = _terrainNoise.OctaveNoise01(worldX, 0, TerrainOctaves,
-                                                   TerrainPersistence, TerrainFrequency);
+        float noise = _terrainNoise.OctaveNoise01(
+            worldX, 0,
+            TerrainOctaves,
+            TerrainPersistence,
+            TerrainFrequency
+        );
 
         // Map noise to terrain height
         int height = (int)(noise * TerrainHeight);
@@ -102,8 +105,8 @@ public class WorldGenerator
 
         int depth = worldY - surfaceY;
 
-        // Check for caves first (but not too close to surface)
-        if (depth > 5 && IsCave(worldX, worldY))
+        // Check for caves (but not too close to surface, and not too deep initially)
+        if (depth > 8 && IsCave(worldX, worldY, depth))
         {
             return TileType.Air;
         }
@@ -133,19 +136,22 @@ public class WorldGenerator
     /// <summary>
     /// Check if a position should be a cave.
     /// </summary>
-    private bool IsCave(int worldX, int worldY)
+    private bool IsCave(int worldX, int worldY, int depth)
     {
-        float noise = _caveNoise.OctaveNoise01(worldX, worldY, CaveOctaves,
-                                                CavePersistence, CaveFrequency);
+        // Use 2D noise for cave generation
+        float noise = _caveNoise.OctaveNoise01(
+            worldX, worldY,
+            CaveOctaves,
+            CavePersistence,
+            CaveFrequency
+        );
 
-        // Caves are more likely deeper underground
-        int depth = worldY - SurfaceLevel;
-        float depthFactor = MathF.Min(1f, depth / 50f);
+        // Caves are slightly more common deeper, but cap it
+        float depthBonus = MathF.Min(depth / 100f, 0.1f);
 
-        // Adjust threshold based on depth (more caves deeper)
-        float threshold = CaveThreshold + (1f - depthFactor) * 0.1f;
-
-        return noise < threshold;
+        // Cave if noise is below threshold
+        // Lower threshold = fewer caves
+        return noise < (CaveThreshold + depthBonus);
     }
 
     /// <summary>
@@ -153,38 +159,38 @@ public class WorldGenerator
     /// </summary>
     private TileType GetOreType(int worldX, int worldY, int depth)
     {
-        // Use noise for ore distribution
-        float oreNoise = _oreNoise.Noise01(worldX * 0.1f, worldY * 0.1f);
+        // Sample ore noise at different offsets for each ore type
+        float baseNoise = _oreNoise.Noise01(worldX * 0.08f, worldY * 0.08f);
 
-        // Copper: Common, spawns at all depths
-        if (depth >= 10 && oreNoise > 0.75f)
+        // Copper: Spawns at depth 5+, common
+        if (depth >= 5)
         {
-            float copperNoise = _oreNoise.Noise01(worldX * 0.2f + 100, worldY * 0.2f);
-            if (copperNoise > 0.7f)
+            float copperNoise = _oreNoise.Noise01(worldX * 0.15f + 100, worldY * 0.15f);
+            if (copperNoise > 0.75f && baseNoise > 0.6f)
                 return TileType.CopperOre;
         }
 
-        // Iron: Less common, spawns below depth 20
-        if (depth >= 20 && oreNoise > 0.8f)
+        // Iron: Spawns at depth 15+, less common
+        if (depth >= 15)
         {
-            float ironNoise = _oreNoise.Noise01(worldX * 0.2f + 200, worldY * 0.2f);
-            if (ironNoise > 0.75f)
+            float ironNoise = _oreNoise.Noise01(worldX * 0.15f + 200, worldY * 0.15f);
+            if (ironNoise > 0.78f && baseNoise > 0.65f)
                 return TileType.IronOre;
         }
 
-        // Silver: Rare, spawns below depth 35
-        if (depth >= 35 && oreNoise > 0.85f)
+        // Silver: Spawns at depth 30+, rare
+        if (depth >= 30)
         {
-            float silverNoise = _oreNoise.Noise01(worldX * 0.2f + 300, worldY * 0.2f);
-            if (silverNoise > 0.8f)
+            float silverNoise = _oreNoise.Noise01(worldX * 0.15f + 300, worldY * 0.15f);
+            if (silverNoise > 0.82f && baseNoise > 0.7f)
                 return TileType.SilverOre;
         }
 
-        // Gold: Very rare, spawns below depth 50
-        if (depth >= 50 && oreNoise > 0.9f)
+        // Gold: Spawns at depth 50+, very rare
+        if (depth >= 50)
         {
-            float goldNoise = _oreNoise.Noise01(worldX * 0.2f + 400, worldY * 0.2f);
-            if (goldNoise > 0.85f)
+            float goldNoise = _oreNoise.Noise01(worldX * 0.15f + 400, worldY * 0.15f);
+            if (goldNoise > 0.88f && baseNoise > 0.75f)
                 return TileType.GoldOre;
         }
 
