@@ -137,14 +137,11 @@ public class TerrascentGame : Game
         // Handle player input
         _player.HandleInput(_input, dt);
 
-        // Update player physics
+        // Update player physics (gravity)
         _player.Update(dt);
 
         // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
-
-        // Extra ground check for corner cases
-        _player.CheckGroundState(_chunkManager);
     }
 
     private void VariableUpdate(float deltaTime)

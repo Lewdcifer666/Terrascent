@@ -16,18 +16,19 @@ public class Player : Entity
     public float Friction { get; set; } = 800f;
     public float AirControl { get; set; } = 0.6f;
 
-    // Jump buffering and coyote time
+    // Jump buffering and coyote time (generous values for responsive feel)
     private float _jumpBufferTime = 0f;
     private float _coyoteTime = 0f;
-    private const float JUMP_BUFFER_DURATION = 0.15f;  // Increased to 150ms
-    private const float COYOTE_DURATION = 0.12f;       // Increased to 120ms
+    private const float JUMP_BUFFER_DURATION = 0.2f;   // 200ms buffer
+    private const float COYOTE_DURATION = 0.15f;       // 150ms coyote time
 
     // State
     public bool IsJumping { get; private set; }
     public int FacingDirection { get; private set; } = 1;
 
-    // Track if we were on ground last frame (for coyote time)
-    private bool _wasOnGround;
+    // Ground state tracking
+    private int _groundedFrames = 0;
+    private const int GROUND_STICKY_FRAMES = 3;  // Stay "grounded" for a few frames
 
     public Player()
     {
@@ -54,8 +55,9 @@ public class Player : Entity
         float targetVelX = moveDir * MoveSpeed;
 
         // Apply acceleration/friction based on ground state
-        float accel = OnGround ? Acceleration : Acceleration * AirControl;
-        float fric = OnGround ? Friction : Friction * AirControl * 0.5f;
+        bool effectivelyGrounded = OnGround || _groundedFrames > 0;
+        float accel = effectivelyGrounded ? Acceleration : Acceleration * AirControl;
+        float fric = effectivelyGrounded ? Friction : Friction * AirControl * 0.5f;
 
         if (moveDir != 0)
         {
@@ -94,27 +96,24 @@ public class Player : Entity
             }
         }
 
-        // Update coyote time - only start counting down when we LEAVE the ground
+        // Track grounded state with sticky frames
         if (OnGround)
         {
+            _groundedFrames = GROUND_STICKY_FRAMES;
             _coyoteTime = COYOTE_DURATION;
             IsJumping = false;
         }
-        else if (_wasOnGround && !OnGround)
-        {
-            // Just left the ground - start coyote timer (but don't reset if already in air)
-            // _coyoteTime already has its value from being on ground
-        }
         else
         {
-            // In the air - count down
+            if (_groundedFrames > 0)
+                _groundedFrames--;
             _coyoteTime -= deltaTime;
         }
 
-        _wasOnGround = OnGround;
-
-        // Jump input buffering - check for jump press
-        bool jumpPressed = input.IsKeyPressed(Keys.Space) || input.IsKeyPressed(Keys.W);
+        // Jump input - check EVERY frame for press
+        bool jumpPressed = input.IsKeyPressed(Keys.Space) ||
+                          input.IsKeyPressed(Keys.W) ||
+                          input.IsKeyPressed(Keys.Up);
 
         if (jumpPressed)
         {
@@ -125,27 +124,27 @@ public class Player : Entity
             _jumpBufferTime -= deltaTime;
         }
 
-        // Execute jump if:
-        // 1. Jump was pressed recently (buffer > 0)
-        // 2. We can jump (on ground or in coyote time)
-        // 3. We're not already in an upward jump
-        bool canJump = _coyoteTime > 0 || OnGround;
-        bool notRising = Velocity.Y >= 0 || !IsJumping;
+        // Can we jump?
+        // - Jump buffer is active (recently pressed jump)
+        // - Either on ground, in coyote time, or in sticky ground frames
+        // - Not currently rising from a jump
+        bool canJump = OnGround || _coyoteTime > 0 || _groundedFrames > 0;
+        bool notCurrentlyJumping = Velocity.Y >= -10f || !IsJumping;  // Small threshold
 
-        if (_jumpBufferTime > 0 && canJump && notRising)
+        if (_jumpBufferTime > 0 && canJump && notCurrentlyJumping)
         {
-            Jump();
-            _jumpBufferTime = 0;
-            _coyoteTime = 0;
+            ExecuteJump();
         }
 
         // Variable jump height - release early for shorter jump
-        bool jumpHeld = input.IsKeyDown(Keys.Space) || input.IsKeyDown(Keys.W);
+        bool jumpHeld = input.IsKeyDown(Keys.Space) ||
+                       input.IsKeyDown(Keys.W) ||
+                       input.IsKeyDown(Keys.Up);
 
-        if (IsJumping && Velocity.Y < 0 && !jumpHeld)
+        if (IsJumping && Velocity.Y < -50f && !jumpHeld)
         {
             // Cut jump short
-            Velocity = new Vector2(Velocity.X, Velocity.Y * 0.5f);
+            Velocity = new Vector2(Velocity.X, Velocity.Y * 0.4f);
             IsJumping = false;
         }
     }
@@ -153,30 +152,22 @@ public class Player : Entity
     /// <summary>
     /// Execute a jump.
     /// </summary>
-    public void Jump()
+    private void ExecuteJump()
     {
         Velocity = new Vector2(Velocity.X, -JumpForce);
         IsJumping = true;
         OnGround = false;
-        _wasOnGround = false;
+        _groundedFrames = 0;
+        _coyoteTime = 0;
+        _jumpBufferTime = 0;
     }
 
     /// <summary>
-    /// Additional ground check - call after ApplyMovement.
+    /// Public method to force a jump (for external triggers).
     /// </summary>
-    public void CheckGroundState(World.ChunkManager chunks)
+    public void Jump()
     {
-        // If we think we're not on ground, do an extra check
-        // This helps with corner cases
-        if (!OnGround && Velocity.Y >= 0)
-        {
-            // Check 1 pixel below our feet
-            Vector2 checkPos = new(Position.X, Position.Y + 1);
-            if (WouldCollide(checkPos, chunks))
-            {
-                OnGround = true;
-            }
-        }
+        ExecuteJump();
     }
 
     /// <summary>
@@ -184,14 +175,17 @@ public class Player : Entity
     /// </summary>
     public void SpawnAt(int tileX, int surfaceY)
     {
+        // Spawn a few tiles above surface
+        float spawnY = (surfaceY - 3) * World.WorldCoordinates.TILE_SIZE;
+
         Position = new Vector2(
             tileX * World.WorldCoordinates.TILE_SIZE - Width / 2f,
-            (surfaceY - 3) * World.WorldCoordinates.TILE_SIZE - Height
+            spawnY
         );
         Velocity = Vector2.Zero;
         OnGround = false;
-        _wasOnGround = false;
         IsJumping = false;
+        _groundedFrames = 0;
         _coyoteTime = 0;
         _jumpBufferTime = 0;
     }

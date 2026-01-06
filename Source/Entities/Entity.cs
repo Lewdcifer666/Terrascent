@@ -17,7 +17,7 @@ public abstract class Entity
     public int Height { get; protected set; } = 48;
 
     // Physics flags
-    public bool OnGround { get; protected set; }
+    public bool OnGround { get; set; }
     public bool CollidingLeft { get; protected set; }
     public bool CollidingRight { get; protected set; }
     public bool CollidingAbove { get; protected set; }
@@ -81,11 +81,21 @@ public abstract class Entity
         CollidingLeft = false;
         CollidingRight = false;
         CollidingAbove = false;
+
+        // Don't reset OnGround here - we'll check it properly
+        bool wasOnGround = OnGround;
         OnGround = false;
 
         // Move horizontally first, then vertically (avoids corner issues)
         MoveHorizontal(Velocity.X * deltaTime, chunks);
         MoveVertical(Velocity.Y * deltaTime, chunks);
+
+        // Always check ground state, even if we didn't move vertically
+        // This prevents OnGround from flickering when standing still
+        if (!OnGround && Velocity.Y >= 0)
+        {
+            CheckGroundBelow(chunks);
+        }
     }
 
     /// <summary>
@@ -93,14 +103,14 @@ public abstract class Entity
     /// </summary>
     protected void MoveHorizontal(float amount, World.ChunkManager chunks)
     {
-        if (amount == 0) return;
+        if (MathF.Abs(amount) < 0.001f) return;
 
         float sign = MathF.Sign(amount);
         float remaining = MathF.Abs(amount);
 
-        while (remaining > 0)
+        while (remaining > 0.001f)
         {
-            float step = MathF.Min(remaining, 1f); // Move 1 pixel at a time for precision
+            float step = MathF.Min(remaining, 1f);
             Vector2 newPos = new(Position.X + step * sign, Position.Y);
 
             if (!WouldCollide(newPos, chunks))
@@ -110,9 +120,25 @@ public abstract class Entity
             }
             else
             {
-                // Hit something
-                if (sign > 0) CollidingRight = true;
-                else CollidingLeft = true;
+                // Hit something - snap to tile edge
+                if (sign > 0)
+                {
+                    // Moving right - snap to left edge of tile
+                    int tileX = (int)MathF.Floor((Position.X + Width + step * sign) / World.WorldCoordinates.TILE_SIZE);
+                    float snapX = tileX * World.WorldCoordinates.TILE_SIZE - Width;
+                    if (snapX > Position.X)
+                        Position = new Vector2(snapX, Position.Y);
+                    CollidingRight = true;
+                }
+                else
+                {
+                    // Moving left - snap to right edge of tile
+                    int tileX = (int)MathF.Floor((Position.X + step * sign) / World.WorldCoordinates.TILE_SIZE);
+                    float snapX = (tileX + 1) * World.WorldCoordinates.TILE_SIZE;
+                    if (snapX < Position.X)
+                        Position = new Vector2(snapX, Position.Y);
+                    CollidingLeft = true;
+                }
 
                 Velocity = new Vector2(0, Velocity.Y);
                 break;
@@ -125,12 +151,12 @@ public abstract class Entity
     /// </summary>
     protected void MoveVertical(float amount, World.ChunkManager chunks)
     {
-        if (amount == 0) return;
+        if (MathF.Abs(amount) < 0.001f) return;
 
         float sign = MathF.Sign(amount);
         float remaining = MathF.Abs(amount);
 
-        while (remaining > 0)
+        while (remaining > 0.001f)
         {
             float step = MathF.Min(remaining, 1f);
             Vector2 newPos = new(Position.X, Position.Y + step * sign);
@@ -142,13 +168,23 @@ public abstract class Entity
             }
             else
             {
-                // Hit something
+                // Hit something - snap to tile edge
                 if (sign > 0)
                 {
+                    // Moving down - snap to top of tile (land on ground)
+                    int tileY = (int)MathF.Floor((Position.Y + Height + step * sign) / World.WorldCoordinates.TILE_SIZE);
+                    float snapY = tileY * World.WorldCoordinates.TILE_SIZE - Height;
+                    if (snapY > Position.Y)
+                        Position = new Vector2(Position.X, snapY);
                     OnGround = true;
                 }
                 else
                 {
+                    // Moving up - snap to bottom of tile (hit ceiling)
+                    int tileY = (int)MathF.Floor((Position.Y + step * sign) / World.WorldCoordinates.TILE_SIZE);
+                    float snapY = (tileY + 1) * World.WorldCoordinates.TILE_SIZE;
+                    if (snapY < Position.Y)
+                        Position = new Vector2(Position.X, snapY);
                     CollidingAbove = true;
                 }
 
@@ -159,13 +195,24 @@ public abstract class Entity
     }
 
     /// <summary>
-    /// Check if there's solid ground directly below.
-    /// Used for edge cases in ground detection.
+    /// Check if there's ground directly below (for standing still detection).
     /// </summary>
-    protected bool CheckGroundBelow(World.ChunkManager chunks, float distance = 1f)
+    protected void CheckGroundBelow(World.ChunkManager chunks)
     {
-        Vector2 checkPos = new(Position.X, Position.Y + distance);
-        return WouldCollide(checkPos, chunks);
+        // Check 1-2 pixels below feet
+        Vector2 checkPos = new(Position.X, Position.Y + 1);
+        if (WouldCollide(checkPos, chunks))
+        {
+            OnGround = true;
+
+            // Snap to ground if we're floating slightly
+            int tileY = (int)MathF.Floor((Position.Y + Height + 1) / World.WorldCoordinates.TILE_SIZE);
+            float groundY = tileY * World.WorldCoordinates.TILE_SIZE - Height;
+            if (groundY >= Position.Y && groundY < Position.Y + 2)
+            {
+                Position = new Vector2(Position.X, groundY);
+            }
+        }
     }
 
     /// <summary>
@@ -175,9 +222,9 @@ public abstract class Entity
     {
         // Use Floor to handle negative coordinates correctly
         int left = (int)MathF.Floor(position.X / World.WorldCoordinates.TILE_SIZE);
-        int right = (int)MathF.Floor((position.X + Width - 1) / World.WorldCoordinates.TILE_SIZE);
+        int right = (int)MathF.Floor((position.X + Width - 0.001f) / World.WorldCoordinates.TILE_SIZE);
         int top = (int)MathF.Floor(position.Y / World.WorldCoordinates.TILE_SIZE);
-        int bottom = (int)MathF.Floor((position.Y + Height - 1) / World.WorldCoordinates.TILE_SIZE);
+        int bottom = (int)MathF.Floor((position.Y + Height - 0.001f) / World.WorldCoordinates.TILE_SIZE);
 
         for (int y = top; y <= bottom; y++)
         {
