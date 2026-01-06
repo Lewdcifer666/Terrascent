@@ -5,7 +5,7 @@ namespace Terrascent.Core;
 
 /// <summary>
 /// Handles all input state tracking with current/previous frame comparison.
-/// Provides methods for detecting key presses, releases, and holds.
+/// Buffers key presses to ensure they aren't missed between fixed updates.
 /// </summary>
 public class InputManager
 {
@@ -16,6 +16,14 @@ public class InputManager
     // Mouse state
     private MouseState _currentMouse;
     private MouseState _previousMouse;
+
+    // Buffered key presses (persists until consumed)
+    private HashSet<Keys> _bufferedKeyPresses = new();
+    private HashSet<Keys> _consumedThisFrame = new();
+
+    // Buffered mouse presses
+    private bool _leftMousePressBuffered;
+    private bool _rightMousePressBuffered;
 
     /// <summary>
     /// Current mouse position in screen coordinates.
@@ -42,6 +50,41 @@ public class InputManager
 
         _currentKeyboard = Keyboard.GetState();
         _currentMouse = Mouse.GetState();
+
+        // Clear consumed keys from last fixed update
+        _consumedThisFrame.Clear();
+
+        // Buffer any new key presses
+        foreach (Keys key in Enum.GetValues<Keys>())
+        {
+            if (_currentKeyboard.IsKeyDown(key) && _previousKeyboard.IsKeyUp(key))
+            {
+                _bufferedKeyPresses.Add(key);
+            }
+        }
+
+        // Buffer mouse presses
+        if (_currentMouse.LeftButton == ButtonState.Pressed &&
+            _previousMouse.LeftButton == ButtonState.Released)
+        {
+            _leftMousePressBuffered = true;
+        }
+
+        if (_currentMouse.RightButton == ButtonState.Pressed &&
+            _previousMouse.RightButton == ButtonState.Released)
+        {
+            _rightMousePressBuffered = true;
+        }
+    }
+
+    /// <summary>
+    /// Call this at the end of FixedUpdate to clear consumed presses.
+    /// </summary>
+    public void ConsumeBufferedPresses()
+    {
+        _bufferedKeyPresses.Clear();
+        _leftMousePressBuffered = false;
+        _rightMousePressBuffered = false;
     }
 
     #region Keyboard Methods
@@ -57,10 +100,12 @@ public class InputManager
     public bool IsKeyUp(Keys key) => _currentKeyboard.IsKeyUp(key);
 
     /// <summary>
-    /// Returns true only on the frame the key was first pressed.
+    /// Returns true if the key was pressed (buffered, survives until consumed).
     /// </summary>
-    public bool IsKeyPressed(Keys key) =>
-        _currentKeyboard.IsKeyDown(key) && _previousKeyboard.IsKeyUp(key);
+    public bool IsKeyPressed(Keys key)
+    {
+        return _bufferedKeyPresses.Contains(key);
+    }
 
     /// <summary>
     /// Returns true only on the frame the key was released.
@@ -105,18 +150,14 @@ public class InputManager
     public bool IsRightMouseDown() => _currentMouse.RightButton == ButtonState.Pressed;
 
     /// <summary>
-    /// Returns true only on the frame left mouse was clicked.
+    /// Returns true if left mouse was clicked (buffered).
     /// </summary>
-    public bool IsLeftMousePressed() =>
-        _currentMouse.LeftButton == ButtonState.Pressed &&
-        _previousMouse.LeftButton == ButtonState.Released;
+    public bool IsLeftMousePressed() => _leftMousePressBuffered;
 
     /// <summary>
-    /// Returns true only on the frame right mouse was clicked.
+    /// Returns true if right mouse was clicked (buffered).
     /// </summary>
-    public bool IsRightMousePressed() =>
-        _currentMouse.RightButton == ButtonState.Pressed &&
-        _previousMouse.RightButton == ButtonState.Released;
+    public bool IsRightMousePressed() => _rightMousePressBuffered;
 
     /// <summary>
     /// Returns true only on the frame left mouse was released.

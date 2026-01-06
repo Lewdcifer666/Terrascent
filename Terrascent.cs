@@ -142,6 +142,9 @@ public class TerrascentGame : Game
 
         // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
+
+        // Consume buffered input presses after processing
+        _input.ConsumeBufferedPresses();
     }
 
     private void VariableUpdate(float deltaTime)

@@ -16,11 +16,11 @@ public class Player : Entity
     public float Friction { get; set; } = 800f;
     public float AirControl { get; set; } = 0.6f;
 
-    // Jump buffering and coyote time (generous values for responsive feel)
+    // Jump buffering and coyote time
     private float _jumpBufferTime = 0f;
     private float _coyoteTime = 0f;
-    private const float JUMP_BUFFER_DURATION = 0.2f;   // 200ms buffer
-    private const float COYOTE_DURATION = 0.15f;       // 150ms coyote time
+    private const float JUMP_BUFFER_DURATION = 0.2f;
+    private const float COYOTE_DURATION = 0.15f;
 
     // State
     public bool IsJumping { get; private set; }
@@ -28,7 +28,11 @@ public class Player : Entity
 
     // Ground state tracking
     private int _groundedFrames = 0;
-    private const int GROUND_STICKY_FRAMES = 3;  // Stay "grounded" for a few frames
+    private const int GROUND_STICKY_FRAMES = 3;
+
+    // Debug tracking
+    private int _framesSinceJumpPress = 999;
+    private bool _lastJumpPressed = false;
 
     public Player()
     {
@@ -61,7 +65,6 @@ public class Player : Entity
 
         if (moveDir != 0)
         {
-            // Accelerate toward target
             if (Velocity.X < targetVelX)
             {
                 Velocity = new Vector2(
@@ -79,7 +82,6 @@ public class Player : Entity
         }
         else
         {
-            // Apply friction when not pressing movement
             if (Velocity.X > 0)
             {
                 Velocity = new Vector2(
@@ -110,48 +112,59 @@ public class Player : Entity
             _coyoteTime -= deltaTime;
         }
 
-        // Jump input - check EVERY frame for press
+        // Jump input detection
         bool jumpPressed = input.IsKeyPressed(Keys.Space) ||
                           input.IsKeyPressed(Keys.W) ||
                           input.IsKeyPressed(Keys.Up);
 
+        bool jumpHeld = input.IsKeyDown(Keys.Space) ||
+                       input.IsKeyDown(Keys.W) ||
+                       input.IsKeyDown(Keys.Up);
+
+        // Track frames since jump press for debugging
+        _framesSinceJumpPress++;
+
         if (jumpPressed)
         {
             _jumpBufferTime = JUMP_BUFFER_DURATION;
+            _framesSinceJumpPress = 0;
+
+            // DEBUG: Log jump press and current state
+            System.Diagnostics.Debug.WriteLine($"[JUMP PRESSED] OnGround={OnGround}, GroundedFrames={_groundedFrames}, CoyoteTime={_coyoteTime:F3}, VelY={Velocity.Y:F1}, IsJumping={IsJumping}");
         }
         else
         {
             _jumpBufferTime -= deltaTime;
         }
 
-        // Can we jump?
-        // - Jump buffer is active (recently pressed jump)
-        // - Either on ground, in coyote time, or in sticky ground frames
-        // - Not currently rising from a jump
+        // Jump conditions
         bool canJump = OnGround || _coyoteTime > 0 || _groundedFrames > 0;
-        bool notCurrentlyJumping = Velocity.Y >= -10f || !IsJumping;  // Small threshold
+        bool notCurrentlyJumping = Velocity.Y >= -10f || !IsJumping;
+        bool shouldJump = _jumpBufferTime > 0 && canJump && notCurrentlyJumping;
 
-        if (_jumpBufferTime > 0 && canJump && notCurrentlyJumping)
+        // DEBUG: If we recently pressed jump but didn't execute, log why
+        if (_framesSinceJumpPress < 10 && !shouldJump && _jumpBufferTime > 0)
         {
+            System.Diagnostics.Debug.WriteLine($"[JUMP BLOCKED] Buffer={_jumpBufferTime:F3}, CanJump={canJump} (OG={OnGround}, CT={_coyoteTime:F3}, GF={_groundedFrames}), NotJumping={notCurrentlyJumping} (VelY={Velocity.Y:F1}, IsJ={IsJumping})");
+        }
+
+        if (shouldJump)
+        {
+            System.Diagnostics.Debug.WriteLine($"[JUMP EXECUTE] Buffer={_jumpBufferTime:F3}, CanJump={canJump}, NotJumping={notCurrentlyJumping}");
             ExecuteJump();
         }
 
-        // Variable jump height - release early for shorter jump
-        bool jumpHeld = input.IsKeyDown(Keys.Space) ||
-                       input.IsKeyDown(Keys.W) ||
-                       input.IsKeyDown(Keys.Up);
-
+        // Variable jump height
         if (IsJumping && Velocity.Y < -50f && !jumpHeld)
         {
-            // Cut jump short
             Velocity = new Vector2(Velocity.X, Velocity.Y * 0.4f);
             IsJumping = false;
         }
+
+        // Store for next frame comparison
+        _lastJumpPressed = jumpPressed;
     }
 
-    /// <summary>
-    /// Execute a jump.
-    /// </summary>
     private void ExecuteJump()
     {
         Velocity = new Vector2(Velocity.X, -JumpForce);
@@ -162,20 +175,13 @@ public class Player : Entity
         _jumpBufferTime = 0;
     }
 
-    /// <summary>
-    /// Public method to force a jump (for external triggers).
-    /// </summary>
     public void Jump()
     {
         ExecuteJump();
     }
 
-    /// <summary>
-    /// Spawn the player at a safe position above the given surface.
-    /// </summary>
     public void SpawnAt(int tileX, int surfaceY)
     {
-        // Spawn a few tiles above surface
         float spawnY = (surfaceY - 3) * World.WorldCoordinates.TILE_SIZE;
 
         Position = new Vector2(

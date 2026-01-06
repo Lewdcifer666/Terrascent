@@ -82,19 +82,21 @@ public abstract class Entity
         CollidingRight = false;
         CollidingAbove = false;
 
-        // Don't reset OnGround here - we'll check it properly
         bool wasOnGround = OnGround;
         OnGround = false;
 
-        // Move horizontally first, then vertically (avoids corner issues)
         MoveHorizontal(Velocity.X * deltaTime, chunks);
         MoveVertical(Velocity.Y * deltaTime, chunks);
 
-        // Always check ground state, even if we didn't move vertically
-        // This prevents OnGround from flickering when standing still
         if (!OnGround && Velocity.Y >= 0)
         {
             CheckGroundBelow(chunks);
+        }
+
+        // DEBUG: Log ground state changes
+        if (wasOnGround != OnGround)
+        {
+            System.Diagnostics.Debug.WriteLine($"[GROUND STATE] Changed: {wasOnGround} -> {OnGround}, VelY={Velocity.Y:F1}");
         }
     }
 
