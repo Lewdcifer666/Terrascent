@@ -2,10 +2,6 @@
 
 /// <summary>
 /// Generates world terrain using multiple passes.
-/// Pass 1: Base terrain (height)
-/// Pass 2: Caves
-/// Pass 3: Ores
-/// Pass 4: Surface decorations (trees)
 /// </summary>
 public class WorldGenerator
 {
@@ -32,7 +28,6 @@ public class WorldGenerator
     public float CaveFrequency { get; set; } = 0.04f;
     public float CavePersistence { get; set; } = 0.5f;
 
-    // Tree generation enabled
     public bool GenerateTrees { get; set; } = true;
 
     public WorldGenerator(int seed)
@@ -48,9 +43,6 @@ public class WorldGenerator
         System.Diagnostics.Debug.WriteLine($"WorldGenerator created with seed: {seed}");
     }
 
-    /// <summary>
-    /// Generate terrain for a specific chunk.
-    /// </summary>
     public void GenerateChunk(Chunk chunk)
     {
         int chunkWorldX = chunk.Position.X * Chunk.SIZE;
@@ -73,64 +65,54 @@ public class WorldGenerator
         }
 
         // === PASS 4: Trees ===
-        // Trees need to be placed after base terrain because they span multiple tiles
         if (GenerateTrees)
         {
-            GenerateTreesInChunk(chunk, chunkWorldX, chunkWorldY);
+            GenerateTreesForChunk(chunk, chunkWorldX, chunkWorldY);
         }
 
         chunk.MarkLoaded();
     }
 
     /// <summary>
-    /// Generate trees within a chunk.
+    /// Generate trees that could appear in this chunk.
+    /// Checks a wider X range to catch trees from neighboring areas.
     /// </summary>
-    private void GenerateTreesInChunk(Chunk chunk, int chunkWorldX, int chunkWorldY)
+    private void GenerateTreesForChunk(Chunk chunk, int chunkWorldX, int chunkWorldY)
     {
-        // Only process chunks that might contain the surface
-        int minSurfaceY = SurfaceLevel;
-        int maxSurfaceY = SurfaceLevel + TerrainHeight + 10;
-
         int chunkTopY = chunkWorldY;
-        int chunkBottomY = chunkWorldY + Chunk.SIZE;
+        int chunkBottomY = chunkWorldY + Chunk.SIZE - 1;
 
-        // Skip if chunk is entirely above or below surface range
-        if (chunkBottomY < minSurfaceY - 15 || chunkTopY > maxSurfaceY)
-            return;
+        // Check a wider X range to catch trees whose canopy extends into this chunk
+        int checkMargin = 10; // Max canopy radius
+        int startX = chunkWorldX - checkMargin;
+        int endX = chunkWorldX + Chunk.SIZE + checkMargin;
 
-        // Check each X position in the chunk for tree placement
-        for (int localX = 0; localX < Chunk.SIZE; localX++)
+        for (int worldX = startX; worldX < endX; worldX++)
         {
-            int worldX = chunkWorldX + localX;
-
-            // Check if tree should spawn here
             if (!_treeGenerator.ShouldPlaceTree(worldX))
                 continue;
 
             int surfaceY = GetSurfaceHeight(worldX);
 
-            // Check if surface is in this chunk
+            // Skip if surface is way outside this chunk's Y range
+            if (surfaceY < chunkTopY - 20 || surfaceY > chunkBottomY + 5)
+                continue;
+
+            // Check if surface tile is grass (verify it's not a cave opening)
+            // Only do this check if surface is actually in this chunk
+            int localSurfaceX = worldX - chunkWorldX;
             int localSurfaceY = surfaceY - chunkWorldY;
-            if (localSurfaceY < 0 || localSurfaceY >= Chunk.SIZE)
-                continue;
 
-            // Verify the surface tile is grass (not in a cave entrance)
-            ref var surfaceTile = ref chunk.GetTile(localX, localSurfaceY);
-            if (surfaceTile.Type != TileType.Grass)
-                continue;
-
-            // Check tile above is air
-            if (localSurfaceY > 0)
+            if (localSurfaceX >= 0 && localSurfaceX < Chunk.SIZE &&
+                localSurfaceY >= 0 && localSurfaceY < Chunk.SIZE)
             {
-                ref var aboveTile = ref chunk.GetTile(localX, localSurfaceY - 1);
-                if (!aboveTile.IsAir)
+                ref var surfaceTile = ref chunk.GetTile(localSurfaceX, localSurfaceY);
+                if (surfaceTile.Type != TileType.Grass)
                     continue;
             }
 
-            // Generate tree data
+            // Generate and place tree
             var tree = _treeGenerator.GenerateTree(worldX, surfaceY);
-
-            // Place tree tiles directly in chunk (only what fits)
             PlaceTreeInChunk(chunk, tree, chunkWorldX, chunkWorldY);
         }
     }
@@ -141,9 +123,11 @@ public class WorldGenerator
     private void PlaceTreeInChunk(Chunk chunk, TreeData tree, int chunkWorldX, int chunkWorldY)
     {
         // Place trunk (from base going up)
-        for (int y = 0; y < tree.TrunkHeight; y++)
+        int trunkTopY = tree.TrunkBaseY - tree.TrunkHeight + 1;
+
+        for (int i = 0; i < tree.TrunkHeight; i++)
         {
-            int worldY = tree.TrunkBaseY - y;
+            int worldY = tree.TrunkBaseY - i;
             int localX = tree.TrunkX - chunkWorldX;
             int localY = worldY - chunkWorldY;
 
@@ -157,55 +141,62 @@ public class WorldGenerator
             }
         }
 
-        // Place canopy (leaves) - more natural oval shape
-        int trunkTopY = tree.TrunkBaseY - tree.TrunkHeight + 1;
-        int canopyCenterY = trunkTopY - (tree.CanopyHeight / 2);
+        // Place canopy - starts overlapping with trunk top, extends upward
+        // Canopy center is above the trunk
+        int canopyBaseY = trunkTopY;  // Bottom of canopy at trunk top
+        int canopyTopY = canopyBaseY - tree.CanopyHeight;
 
-        for (int dy = -tree.CanopyHeight; dy <= 1; dy++)
+        for (int worldY = canopyTopY; worldY <= canopyBaseY + 1; worldY++)
         {
-            int worldY = canopyCenterY + dy;
+            int localY = worldY - chunkWorldY;
+            if (localY < 0 || localY >= Chunk.SIZE)
+                continue;
 
-            // Calculate radius at this height - widest in the middle, tapers at top and bottom
-            float normalizedHeight = (float)(dy + tree.CanopyHeight) / (tree.CanopyHeight + 1);
+            // Calculate how far from top/bottom of canopy (0 = edge, 1 = center)
+            float canopyProgress = (float)(worldY - canopyTopY) / (canopyBaseY - canopyTopY + 1);
+
+            // Radius: small at top, wide in middle, tapers at bottom
             float radiusMultiplier;
-
-            if (normalizedHeight < 0.5f)
+            if (canopyProgress < 0.3f)
             {
-                // Bottom half - expand from 0.3 to 1.0
-                radiusMultiplier = 0.3f + normalizedHeight * 1.4f;
+                // Top - small
+                radiusMultiplier = 0.4f + canopyProgress * 2f;
+            }
+            else if (canopyProgress < 0.7f)
+            {
+                // Middle - full width
+                radiusMultiplier = 1.0f;
             }
             else
             {
-                // Top half - shrink from 1.0 to 0.4
-                radiusMultiplier = 1.0f - (normalizedHeight - 0.5f) * 1.2f;
+                // Bottom - taper
+                radiusMultiplier = 1.0f - (canopyProgress - 0.7f) * 1.5f;
             }
 
-            int radiusAtHeight = Math.Max(1, (int)(tree.CanopyRadius * radiusMultiplier));
+            int radius = Math.Max(1, (int)(tree.CanopyRadius * radiusMultiplier));
 
-            for (int dx = -radiusAtHeight; dx <= radiusAtHeight; dx++)
+            for (int dx = -radius; dx <= radius; dx++)
             {
                 int worldX = tree.TrunkX + dx;
                 int localX = worldX - chunkWorldX;
-                int localY = worldY - chunkWorldY;
 
-                // Skip if outside chunk bounds
-                if (localX < 0 || localX >= Chunk.SIZE || localY < 0 || localY >= Chunk.SIZE)
+                if (localX < 0 || localX >= Chunk.SIZE)
                     continue;
 
-                // Don't overwrite trunk (center column in lower portion)
-                if (dx == 0 && worldY >= trunkTopY - 1)
+                // Skip trunk column in lower part of canopy
+                if (dx == 0 && worldY >= canopyBaseY - 1)
                     continue;
 
-                // Use elliptical distance for more natural shape
-                float distX = (float)dx / radiusAtHeight;
-                float distY = (float)(dy + tree.CanopyHeight / 2) / (tree.CanopyHeight / 2 + 1);
-                float dist = MathF.Sqrt(distX * distX + distY * distY * 0.5f);
+                // Elliptical shape check
+                float distX = (float)Math.Abs(dx) / radius;
+                if (distX > 1.0f)
+                    continue;
 
-                // Add some variation to edges
+                // Add slight randomness to edges
                 int edgeHash = HashPosition(worldX, worldY);
-                float edgeVariation = (edgeHash % 100) / 100f * 0.3f;
+                float edgeRand = (edgeHash % 100) / 100f * 0.2f;
 
-                if (dist <= 1.0f + edgeVariation)
+                if (distX <= 0.9f + edgeRand)
                 {
                     ref var tile = ref chunk.GetTile(localX, localY);
                     if (tile.IsAir)
@@ -224,9 +215,6 @@ public class WorldGenerator
         return Math.Abs(hash);
     }
 
-    /// <summary>
-    /// Calculate surface height at a given X coordinate.
-    /// </summary>
     public int GetSurfaceHeight(int worldX)
     {
         float noise = _terrainNoise.OctaveNoise01(
@@ -240,50 +228,29 @@ public class WorldGenerator
         return SurfaceLevel + height;
     }
 
-    /// <summary>
-    /// Determine what tile type should be at a given world position.
-    /// </summary>
     private TileType GetTileType(int worldX, int worldY, int surfaceY)
     {
-        // Above surface = air
         if (worldY < surfaceY)
-        {
             return TileType.Air;
-        }
 
         int depth = worldY - surfaceY;
 
-        // Check for caves (but not too close to surface)
         if (depth > 8 && IsCave(worldX, worldY, depth))
-        {
             return TileType.Air;
-        }
 
-        // Surface layer = grass
         if (depth == 0)
-        {
             return TileType.Grass;
-        }
 
-        // Dirt layer
         if (depth < DirtDepth)
-        {
             return TileType.Dirt;
-        }
 
-        // Stone layer - check for ores
         TileType oreType = GetOreType(worldX, worldY, depth);
         if (oreType != TileType.Air)
-        {
             return oreType;
-        }
 
         return TileType.Stone;
     }
 
-    /// <summary>
-    /// Check if a position should be a cave.
-    /// </summary>
     private bool IsCave(int worldX, int worldY, int depth)
     {
         float noise = _caveNoise.OctaveNoise01(
@@ -297,14 +264,10 @@ public class WorldGenerator
         return noise < (CaveThreshold + depthBonus);
     }
 
-    /// <summary>
-    /// Determine if an ore should spawn at this position.
-    /// </summary>
     private TileType GetOreType(int worldX, int worldY, int depth)
     {
         float baseNoise = _oreNoise.Noise01(worldX * 0.08f, worldY * 0.08f);
 
-        // Copper: depth 5+
         if (depth >= 5)
         {
             float copperNoise = _oreNoise.Noise01(worldX * 0.15f + 100, worldY * 0.15f);
@@ -312,7 +275,6 @@ public class WorldGenerator
                 return TileType.CopperOre;
         }
 
-        // Iron: depth 15+
         if (depth >= 15)
         {
             float ironNoise = _oreNoise.Noise01(worldX * 0.15f + 200, worldY * 0.15f);
@@ -320,7 +282,6 @@ public class WorldGenerator
                 return TileType.IronOre;
         }
 
-        // Silver: depth 30+
         if (depth >= 30)
         {
             float silverNoise = _oreNoise.Noise01(worldX * 0.15f + 300, worldY * 0.15f);
@@ -328,7 +289,6 @@ public class WorldGenerator
                 return TileType.SilverOre;
         }
 
-        // Gold: depth 50+
         if (depth >= 50)
         {
             float goldNoise = _oreNoise.Noise01(worldX * 0.15f + 400, worldY * 0.15f);

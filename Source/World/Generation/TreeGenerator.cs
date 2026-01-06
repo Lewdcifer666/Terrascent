@@ -7,11 +7,11 @@ public class TreeGenerator
 {
     private readonly PerlinNoise _treeNoise;
 
-    // Tree parameters
-    public float TreeDensity { get; set; } = 0.08f;   // Reduced from 0.15
+    // Tree parameters - tuned for ~2-3 trees per chunk
+    public float TreeDensity { get; set; } = 0.25f;   // Increased significantly
     public int MinTreeHeight { get; set; } = 4;
-    public int MaxTreeHeight { get; set; } = 9;
-    public int MinTreeSpacing { get; set; } = 4;      // Minimum tiles between trees
+    public int MaxTreeHeight { get; set; } = 12;
+    public int MinTreeSpacing { get; set; } = 6;      // ~4 trees max per 32-tile chunk
 
     public TreeGenerator(int seed)
     {
@@ -20,33 +20,26 @@ public class TreeGenerator
 
     /// <summary>
     /// Check if a tree should spawn at this X position.
-    /// Uses spacing to prevent trees from being too close.
     /// </summary>
     public bool ShouldPlaceTree(int worldX)
     {
-        // Enforce minimum spacing by only allowing trees at certain intervals
-        // Use hash to create pseudo-random but deterministic spacing
-        int spacingHash = HashPosition(worldX / MinTreeSpacing);
-        int selectedSlot = spacingHash % MinTreeSpacing;
+        // Enforce minimum spacing - only check at spacing intervals
+        int slot = ((worldX % MinTreeSpacing) + MinTreeSpacing) % MinTreeSpacing;
+        int hash = HashPosition(worldX / MinTreeSpacing);
+        int selectedSlot = hash % MinTreeSpacing;
 
-        // Only one position per spacing interval can have a tree
-        if ((worldX % MinTreeSpacing) != selectedSlot)
+        if (slot != selectedSlot)
             return false;
 
-        // Use noise to create natural clustering/gaps in forests
-        float noise = _treeNoise.Noise01(worldX * 0.05f, 0);
+        // Use noise for natural variation (forests vs clearings)
+        float noise = _treeNoise.Noise01(worldX * 0.03f, 0);
 
-        // Create tree "zones" - some areas have forests, others are clearings
-        // Noise > 0.4 means we're in a potential tree zone
-        if (noise < 0.35f)
-            return false;
+        // Always allow some trees, but more in "forest" areas
+        float localDensity = TreeDensity * (0.5f + noise);
 
-        // Additional random check based on density
-        int hash = HashPosition(worldX);
-        float roll = (hash % 1000) / 1000f;
-
-        // Scale density by how "forested" this area is
-        float localDensity = TreeDensity * ((noise - 0.35f) / 0.65f) * 2f;
+        // Final random check
+        int rollHash = HashPosition(worldX * 7);
+        float roll = (rollHash % 1000) / 1000f;
 
         return roll < localDensity;
     }
@@ -58,18 +51,17 @@ public class TreeGenerator
     {
         int hash = HashPosition(worldX);
 
-        // Determine tree height based on position
         int heightRange = MaxTreeHeight - MinTreeHeight;
         int trunkHeight = MinTreeHeight + (hash % (heightRange + 1));
 
-        // Canopy size scales with trunk height
-        int canopyRadius = 2 + (trunkHeight / 3);
-        int canopyHeight = 2 + (trunkHeight / 2);
+        // Canopy proportional to trunk
+        int canopyRadius = 2 + (trunkHeight / 4);
+        int canopyHeight = 2 + (trunkHeight / 3);
 
         return new TreeData
         {
             TrunkX = worldX,
-            TrunkBaseY = surfaceY - 1,  // Start trunk one tile above surface
+            TrunkBaseY = surfaceY - 1,
             TrunkHeight = trunkHeight,
             CanopyRadius = canopyRadius,
             CanopyHeight = canopyHeight
