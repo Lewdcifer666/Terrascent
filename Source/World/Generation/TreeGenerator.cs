@@ -5,37 +5,50 @@
 /// </summary>
 public class TreeGenerator
 {
-    private readonly Random _random;
     private readonly PerlinNoise _treeNoise;
 
     // Tree parameters
-    public float TreeDensity { get; set; } = 0.15f;  // Chance per valid surface tile
-    public int MinTreeHeight { get; set; } = 5;
-    public int MaxTreeHeight { get; set; } = 12;
-    public int MinTreeSpacing { get; set; } = 3;     // Minimum tiles between trees
+    public float TreeDensity { get; set; } = 0.08f;   // Reduced from 0.15
+    public int MinTreeHeight { get; set; } = 4;
+    public int MaxTreeHeight { get; set; } = 9;
+    public int MinTreeSpacing { get; set; } = 4;      // Minimum tiles between trees
 
     public TreeGenerator(int seed)
     {
-        _random = new Random(seed);
         _treeNoise = new PerlinNoise(seed + 5000);
     }
 
     /// <summary>
     /// Check if a tree should spawn at this X position.
+    /// Uses spacing to prevent trees from being too close.
     /// </summary>
     public bool ShouldPlaceTree(int worldX)
     {
-        // Use noise to create natural clustering of trees
-        float noise = _treeNoise.Noise01(worldX * 0.1f, 0);
+        // Enforce minimum spacing by only allowing trees at certain intervals
+        // Use hash to create pseudo-random but deterministic spacing
+        int spacingHash = HashPosition(worldX / MinTreeSpacing);
+        int selectedSlot = spacingHash % MinTreeSpacing;
 
-        // Create tree "zones" - some areas have more trees than others
-        float density = noise * TreeDensity * 2f;
+        // Only one position per spacing interval can have a tree
+        if ((worldX % MinTreeSpacing) != selectedSlot)
+            return false;
 
-        // Use position hash for deterministic placement
+        // Use noise to create natural clustering/gaps in forests
+        float noise = _treeNoise.Noise01(worldX * 0.05f, 0);
+
+        // Create tree "zones" - some areas have forests, others are clearings
+        // Noise > 0.4 means we're in a potential tree zone
+        if (noise < 0.35f)
+            return false;
+
+        // Additional random check based on density
         int hash = HashPosition(worldX);
         float roll = (hash % 1000) / 1000f;
 
-        return roll < density;
+        // Scale density by how "forested" this area is
+        float localDensity = TreeDensity * ((noise - 0.35f) / 0.65f) * 2f;
+
+        return roll < localDensity;
     }
 
     /// <summary>
@@ -47,67 +60,20 @@ public class TreeGenerator
 
         // Determine tree height based on position
         int heightRange = MaxTreeHeight - MinTreeHeight;
-        int trunkHeight = MinTreeHeight + (hash % heightRange);
+        int trunkHeight = MinTreeHeight + (hash % (heightRange + 1));
 
-        // Determine canopy size (roughly proportional to height)
-        int canopyRadius = 2 + (trunkHeight / 4);
-        int canopyHeight = 3 + (trunkHeight / 3);
+        // Canopy size scales with trunk height
+        int canopyRadius = 2 + (trunkHeight / 3);
+        int canopyHeight = 2 + (trunkHeight / 2);
 
         return new TreeData
         {
             TrunkX = worldX,
-            TrunkBaseY = surfaceY - 1,  // One tile above surface (surface is grass)
+            TrunkBaseY = surfaceY - 1,  // Start trunk one tile above surface
             TrunkHeight = trunkHeight,
             CanopyRadius = canopyRadius,
             CanopyHeight = canopyHeight
         };
-    }
-
-    /// <summary>
-    /// Place a tree's tiles into the chunk manager.
-    /// </summary>
-    public void PlaceTree(TreeData tree, ChunkManager chunks)
-    {
-        // Place trunk (from bottom to top)
-        for (int y = 0; y < tree.TrunkHeight; y++)
-        {
-            int tileY = tree.TrunkBaseY - y;
-            chunks.SetTileTypeAt(tree.TrunkX, tileY, TileType.Wood);
-        }
-
-        // Place canopy (leaves) - oval/circular shape
-        int canopyTopY = tree.TrunkBaseY - tree.TrunkHeight;
-        int canopyCenterY = canopyTopY - (tree.CanopyHeight / 2);
-
-        for (int dy = -tree.CanopyHeight; dy <= 0; dy++)
-        {
-            int y = canopyTopY + dy;
-
-            // Calculate radius at this height (wider in middle, narrower at top/bottom)
-            float heightRatio = 1f - MathF.Abs(dy + tree.CanopyHeight / 2f) / (tree.CanopyHeight / 2f + 1);
-            int radiusAtHeight = (int)(tree.CanopyRadius * heightRatio) + 1;
-
-            for (int dx = -radiusAtHeight; dx <= radiusAtHeight; dx++)
-            {
-                int x = tree.TrunkX + dx;
-
-                // Skip if this is the trunk position (except at very top)
-                if (dx == 0 && dy > -tree.CanopyHeight + 1)
-                    continue;
-
-                // Circular check with some randomness for natural look
-                float dist = MathF.Sqrt(dx * dx + (dy * 1.5f) * (dy * 1.5f));
-                if (dist <= radiusAtHeight + 0.5f)
-                {
-                    // Only place leaves in air
-                    var existing = chunks.GetTileAt(x, y);
-                    if (existing.IsAir)
-                    {
-                        chunks.SetTileTypeAt(x, y, TileType.Leaves);
-                    }
-                }
-            }
-        }
     }
 
     private static int HashPosition(int x)

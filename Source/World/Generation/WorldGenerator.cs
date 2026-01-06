@@ -140,7 +140,7 @@ public class WorldGenerator
     /// </summary>
     private void PlaceTreeInChunk(Chunk chunk, TreeData tree, int chunkWorldX, int chunkWorldY)
     {
-        // Place trunk
+        // Place trunk (from base going up)
         for (int y = 0; y < tree.TrunkHeight; y++)
         {
             int worldY = tree.TrunkBaseY - y;
@@ -157,15 +157,30 @@ public class WorldGenerator
             }
         }
 
-        // Place canopy
-        int canopyTopY = tree.TrunkBaseY - tree.TrunkHeight;
+        // Place canopy (leaves) - more natural oval shape
+        int trunkTopY = tree.TrunkBaseY - tree.TrunkHeight + 1;
+        int canopyCenterY = trunkTopY - (tree.CanopyHeight / 2);
 
         for (int dy = -tree.CanopyHeight; dy <= 1; dy++)
         {
-            int worldY = canopyTopY + dy;
+            int worldY = canopyCenterY + dy;
 
-            float heightRatio = 1f - MathF.Abs(dy + tree.CanopyHeight / 2f) / (tree.CanopyHeight / 2f + 1);
-            int radiusAtHeight = (int)(tree.CanopyRadius * heightRatio) + 1;
+            // Calculate radius at this height - widest in the middle, tapers at top and bottom
+            float normalizedHeight = (float)(dy + tree.CanopyHeight) / (tree.CanopyHeight + 1);
+            float radiusMultiplier;
+
+            if (normalizedHeight < 0.5f)
+            {
+                // Bottom half - expand from 0.3 to 1.0
+                radiusMultiplier = 0.3f + normalizedHeight * 1.4f;
+            }
+            else
+            {
+                // Top half - shrink from 1.0 to 0.4
+                radiusMultiplier = 1.0f - (normalizedHeight - 0.5f) * 1.2f;
+            }
+
+            int radiusAtHeight = Math.Max(1, (int)(tree.CanopyRadius * radiusMultiplier));
 
             for (int dx = -radiusAtHeight; dx <= radiusAtHeight; dx++)
             {
@@ -173,17 +188,24 @@ public class WorldGenerator
                 int localX = worldX - chunkWorldX;
                 int localY = worldY - chunkWorldY;
 
-                // Skip if outside chunk
+                // Skip if outside chunk bounds
                 if (localX < 0 || localX >= Chunk.SIZE || localY < 0 || localY >= Chunk.SIZE)
                     continue;
 
-                // Skip trunk area except at top
-                if (dx == 0 && dy > -tree.CanopyHeight + 2)
+                // Don't overwrite trunk (center column in lower portion)
+                if (dx == 0 && worldY >= trunkTopY - 1)
                     continue;
 
-                // Circular check
-                float dist = MathF.Sqrt(dx * dx + (dy * 1.3f) * (dy * 1.3f));
-                if (dist <= radiusAtHeight + 0.3f)
+                // Use elliptical distance for more natural shape
+                float distX = (float)dx / radiusAtHeight;
+                float distY = (float)(dy + tree.CanopyHeight / 2) / (tree.CanopyHeight / 2 + 1);
+                float dist = MathF.Sqrt(distX * distX + distY * distY * 0.5f);
+
+                // Add some variation to edges
+                int edgeHash = HashPosition(worldX, worldY);
+                float edgeVariation = (edgeHash % 100) / 100f * 0.3f;
+
+                if (dist <= 1.0f + edgeVariation)
                 {
                     ref var tile = ref chunk.GetTile(localX, localY);
                     if (tile.IsAir)
@@ -193,6 +215,13 @@ public class WorldGenerator
                 }
             }
         }
+    }
+
+    private static int HashPosition(int x, int y)
+    {
+        int hash = x * 374761393 + y * 668265263;
+        hash = (hash ^ (hash >> 13)) * 1274126177;
+        return Math.Abs(hash);
     }
 
     /// <summary>
