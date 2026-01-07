@@ -1,15 +1,17 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Terrascent.Combat;
 using Terrascent.Core;
+using Terrascent.Economy;
 using Terrascent.Entities;
 using Terrascent.Items;
 using Terrascent.Saves;
 using Terrascent.Systems;
+using Terrascent.UI;
 using Terrascent.World;
 using Terrascent.World.Generation;
-using Terrascent.Combat;
-using Terrascent.UI;
+using Terrascent.Economy;
 
 namespace Terrascent;
 
@@ -35,8 +37,12 @@ public class TerrascentGame : Game
     // Systems
     private MiningSystem _mining = null!;
     private BuildingSystem _building = null!;
-
     private CombatSystem _combat = null!;
+
+    // Economy
+    private DifficultyManager _difficultyManager = null!;
+    private ChestManager _chestManager = null!;
+    private List<ChestEntity> _chests = new();
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -127,6 +133,24 @@ public class TerrascentGame : Game
         _building = new BuildingSystem();
         _combat = new CombatSystem();
 
+        // Create economy systems
+        _difficultyManager = new DifficultyManager();
+        _chestManager = new ChestManager(_difficultyManager, _worldSeed);
+
+        // Subscribe to chest events
+        _chestManager.OnChestOpened += (type, drop) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Chest opened! Type: {type}");
+            foreach (var item in drop.Items)
+            {
+                _player.Inventory.AddItem(item, 1);
+                System.Diagnostics.Debug.WriteLine($"  Got: {ItemRegistry.Get(item).Name}");
+            }
+        };
+
+        // Spawn a test chest near player
+        SpawnTestChest();
+
         // Create UI Manager
         _uiManager = new UIManager(_player, _input);
 
@@ -140,6 +164,24 @@ public class TerrascentGame : Game
         System.Diagnostics.Debug.WriteLine($"Player position: {_player.Position}");
 
         base.Initialize();
+    }
+
+    private void SpawnTestChest()
+    {
+        // Spawn a chest near player spawn point
+        int spawnX = 2; // A couple tiles to the right of spawn
+        int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
+
+        var smallChest = new ChestEntity(ChestType.Small, new Point(spawnX, surfaceY - 1));
+        _chests.Add(smallChest);
+
+        var largeChest = new ChestEntity(ChestType.Large, new Point(spawnX + 3, surfaceY - 1));
+        _chests.Add(largeChest);
+
+        var equipChest = new ChestEntity(ChestType.Equipment, new Point(spawnX + 6, surfaceY - 1));
+        _chests.Add(equipChest);
+
+        System.Diagnostics.Debug.WriteLine($"Spawned 3 test chests near ({spawnX}, {surfaceY})");
     }
 
     protected override void LoadContent()
@@ -239,6 +281,13 @@ public class TerrascentGame : Game
         _player.Inventory.AddItem(ItemType.PaulsGoatHoofItem, 2);
         _player.Inventory.AddItem(ItemType.CritGlassesItem, 5);
 
+        // Reset economy
+        _player.Currency.SetGold(100);
+        _difficultyManager.Reset();
+        _chestManager.Reset();
+        _chests.Clear();
+        SpawnTestChest();
+
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
         _player.SpawnAt(0, surfaceY);
@@ -250,6 +299,9 @@ public class TerrascentGame : Game
     private void FixedUpdate()
     {
         float dt = GameLoop.TICK_DURATION;
+
+        // Update difficulty (time-based scaling)
+        _difficultyManager.Update(dt);
 
         _player.HandleInput(_input, dt);
         _player.Update(dt);
@@ -308,6 +360,35 @@ public class TerrascentGame : Game
             {
                 _mining.CancelMining();
             }
+        }
+        // Chest interaction (E key)
+        if (_input.IsKeyPressed(Keys.E))
+        {
+            TryInteractWithChest();
+        }
+    }
+
+    private void TryInteractWithChest()
+    {
+        foreach (var chest in _chests)
+        {
+            if (chest.IsOpened || !chest.IsInRange(_player))
+                continue;
+
+            int cost = chest.GetCost(_chestManager);
+            if (_player.Currency.CanAfford(cost))
+            {
+                var drop = chest.TryOpen(_chestManager, _player.Currency, _player.Stats.LuckBonus);
+                if (drop.HasValue)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Opened chest for {cost} gold!");
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"Can't afford chest! Cost: {cost}, Gold: {_player.Currency.Gold}");
+            }
+            break; // Only interact with one chest per press
         }
     }
 
@@ -588,6 +669,7 @@ public class TerrascentGame : Game
         DrawPlayer();
         DrawTargetTile();
         DrawMiningProgress();
+        DrawChests();
 
         _spriteBatch.End();
 
@@ -601,6 +683,8 @@ public class TerrascentGame : Game
         }
 
         DrawChargeBar();
+        DrawGoldDisplay();
+        DrawDifficultyDisplay();
         DrawDebugInfo();
 
         // Draw UI panels
@@ -709,6 +793,70 @@ public class TerrascentGame : Game
         }
     }
 
+    private void DrawChests()
+    {
+        foreach (var chest in _chests)
+        {
+            Color chestColor = chest.GetColor();
+
+            // Draw chest body
+            DrawRectangle(chest.Position, chest.Width, chest.Height, chestColor);
+
+            // Draw lid (lighter top part)
+            Color lidColor = new Color(
+                Math.Min(255, chestColor.R + 40),
+                Math.Min(255, chestColor.G + 40),
+                Math.Min(255, chestColor.B + 40)
+            );
+            DrawRectangle(chest.Position, chest.Width, 8, lidColor);
+
+            // Draw interaction hint if in range and not opened
+            if (!chest.IsOpened && chest.IsInRange(_player))
+            {
+                // Draw cost above chest
+                int cost = chest.GetCost(_chestManager);
+                Vector2 textPos = new Vector2(chest.Position.X, chest.Position.Y - 16);
+
+                // Background
+                DrawRectangle(textPos, 40, 12, new Color(0, 0, 0, 180));
+
+                // Gold icon (small yellow square)
+                DrawRectangle(new Vector2(textPos.X + 2, textPos.Y + 2), 8, 8, Color.Gold);
+            }
+        }
+    }
+
+    private void DrawGoldDisplay()
+    {
+        int x = 10;
+        int y = 10;
+
+        // Background
+        DrawRectangle(new Vector2(x, y), 100, 24, new Color(0, 0, 0, 180));
+
+        // Gold icon
+        DrawRectangle(new Vector2(x + 4, y + 4), 16, 16, Color.Gold);
+
+        // Gold amount (would need font, just show placeholder for now)
+        // For now, we'll use the debug display
+    }
+
+    private void DrawDifficultyDisplay()
+    {
+        int x = _graphics.PreferredBackBufferWidth - 110;
+        int y = 10;
+
+        var color = _difficultyManager.DifficultyColor;
+        Color diffColor = new Color(color.R, color.G, color.B);
+
+        // Background
+        DrawRectangle(new Vector2(x, y), 100, 24, new Color(0, 0, 0, 180));
+
+        // Difficulty indicator bar
+        float fillPercent = Math.Min(_difficultyManager.Coefficient / 5f, 1f);
+        DrawRectangle(new Vector2(x + 2, y + 2), (int)(96 * fillPercent), 20, diffColor);
+    }
+
     private static Color GetTileColor(TileType type)
     {
         return type switch
@@ -730,7 +878,25 @@ public class TerrascentGame : Game
 
     private void DrawDebugInfo()
     {
-        // TODO: Add font and draw debug text
+        // Debug info would go here with proper font rendering
+        // For now, press Tab to see debug output in console
+
+        if (_input.IsKeyPressed(Keys.Tab))
+        {
+            System.Diagnostics.Debug.WriteLine("=== DEBUG INFO ===");
+            System.Diagnostics.Debug.WriteLine($"Gold: {_player.Currency.Gold}");
+            System.Diagnostics.Debug.WriteLine($"Difficulty: {_difficultyManager.DifficultyTier} ({_difficultyManager.Coefficient:F2})");
+            System.Diagnostics.Debug.WriteLine($"Time: {_difficultyManager.ElapsedTime:F0}s");
+            System.Diagnostics.Debug.WriteLine($"Chests Opened: {_chestManager.TotalChestsOpened}");
+
+            foreach (var chest in _chests)
+            {
+                if (!chest.IsOpened && chest.IsInRange(_player))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Nearby chest: {chest.ChestType} - Cost: {chest.GetCost(_chestManager)}");
+                }
+            }
+        }
     }
 
     private void DrawRectangle(Vector2 position, int width, int height, Color color)

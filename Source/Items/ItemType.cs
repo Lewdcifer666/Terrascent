@@ -56,6 +56,11 @@ public enum ItemType : ushort
     Gel = 310,
     Lens = 311,
 
+    // === Currency (320-329) ===
+    GoldCoin = 320,
+    SilverCoin = 321,
+    CopperCoin = 322,
+
     // === Consumables (400-499) ===
     LesserHealingPotion = 400,
     HealingPotion = 401,

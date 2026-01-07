@@ -1,8 +1,9 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Terrascent.Core;
-using Terrascent.Items;
 using Terrascent.Combat;
+using Terrascent.Core;
+using Terrascent.Economy;
+using Terrascent.Items;
 using Terrascent.Items.Effects;
 
 namespace Terrascent.Entities;
@@ -42,6 +43,9 @@ public class Player : Entity
     // Stats system (Risk of Rain style)
     public PlayerStats Stats { get; } = new();
 
+    // Currency (Risk of Rain style economy)
+    public Currency Currency { get; } = new();
+
     public Player()
     {
         Width = 24;
@@ -65,6 +69,9 @@ public class Player : Entity
         Inventory.AddItem(ItemType.SoldiersSyringeItem, 3);  // +45% attack speed
         Inventory.AddItem(ItemType.PaulsGoatHoofItem, 2);    // +28% move speed
         Inventory.AddItem(ItemType.CritGlassesItem, 5);      // +50% crit chance
+
+        // Starting gold for testing
+        Currency.AddGold(100);
 
         // Initialize stats
         Stats.Recalculate(Inventory);
