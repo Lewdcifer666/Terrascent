@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 using Terrascent.Entities;
+using Terrascent.Systems;
 using Terrascent.World;
 using Terrascent.World.Generation;
 
@@ -25,6 +26,10 @@ public class TerrascentGame : Game
     // Entities
     private Player _player = null!;
 
+    // Systems
+    private MiningSystem _mining = null!;
+    private BuildingSystem _building = null!;
+
     // Temp rendering
     private Texture2D _pixelTexture = null!;
 
@@ -34,6 +39,10 @@ public class TerrascentGame : Game
 
     // World seed
     private int _worldSeed = 12345;
+
+    // Current mouse tile target
+    private Point _mouseTilePos;
+    private bool _isTargetValid;
 
     public TerrascentGame()
     {
@@ -69,6 +78,10 @@ public class TerrascentGame : Game
 
         // Create player
         _player = new Player();
+
+        // Create systems
+        _mining = new MiningSystem();
+        _building = new BuildingSystem();
 
         // Spawn player above the surface at world center
         int spawnX = 0;
@@ -107,6 +120,13 @@ public class TerrascentGame : Game
         {
             RegenerateWorld();
         }
+
+        // Cycle selected block with number keys
+        if (_input.IsKeyPressed(Keys.D1)) _building.SelectedTile = TileType.Dirt;
+        if (_input.IsKeyPressed(Keys.D2)) _building.SelectedTile = TileType.Stone;
+        if (_input.IsKeyPressed(Keys.D3)) _building.SelectedTile = TileType.Wood;
+        if (_input.IsKeyPressed(Keys.D4)) _building.SelectedTile = TileType.Sand;
+        if (_input.IsKeyPressed(Keys.D5)) _building.SelectedTile = TileType.Torch;
 
         // FixedUpdate returns how many physics ticks ran this frame
         int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
@@ -148,7 +168,23 @@ public class TerrascentGame : Game
         // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
 
-        
+        // Handle mining (hold left click)
+        if (_input.IsLeftMouseDown() && _isTargetValid)
+        {
+            var tile = _chunkManager.GetTileAt(_mouseTilePos);
+            if (!tile.IsAir)
+            {
+                bool mined = _mining.UpdateMining(_mouseTilePos, _chunkManager, _player, dt);
+                if (mined)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Mined tile at {_mouseTilePos}");
+                }
+            }
+        }
+        else
+        {
+            _mining.CancelMining();
+        }
     }
 
     private void VariableUpdate(float deltaTime)
@@ -170,28 +206,18 @@ public class TerrascentGame : Game
         if (_input.IsKeyPressed(Keys.R))
             _camera.SetZoom(1f);
 
-        // Debug: Click to inspect tile
-        if (_input.IsLeftMousePressed())
-        {
-            var worldPos = _camera.ScreenToWorld(_input.MousePositionV);
-            var tilePos = WorldCoordinates.WorldToTile(worldPos);
-            var tile = _chunkManager.GetTileAt(tilePos);
-            int surfaceY = _worldGenerator.GetSurfaceHeight(tilePos.X);
-            int depth = tilePos.Y - surfaceY;
-            System.Diagnostics.Debug.WriteLine($"Tile {tilePos}: {tile.Type}, Depth: {depth}");
-        }
+        // Update mouse tile position
+        var worldPos = _camera.ScreenToWorld(_input.MousePositionV);
+        _mouseTilePos = WorldCoordinates.WorldToTile(worldPos);
+        _isTargetValid = _mining.IsInRange(_player, _mouseTilePos);
 
-        // Debug: Right-click to mine/place
+        // Right-click to build
         if (_input.IsRightMousePressed())
         {
-            var worldPos = _camera.ScreenToWorld(_input.MousePositionV);
-            var tilePos = WorldCoordinates.WorldToTile(worldPos);
-            var tile = _chunkManager.GetTileAt(tilePos);
-
-            if (tile.IsAir)
-                _chunkManager.SetTileTypeAt(tilePos.X, tilePos.Y, TileType.Stone);
-            else
-                _chunkManager.ClearTileAt(tilePos.X, tilePos.Y);
+            if (_building.TryPlace(_mouseTilePos, _chunkManager, _player))
+            {
+                System.Diagnostics.Debug.WriteLine($"Placed {_building.SelectedTile} at {_mouseTilePos}");
+            }
         }
     }
 
@@ -218,12 +244,15 @@ public class TerrascentGame : Game
         DrawTiles();
         DrawChunkBorders();
         DrawPlayer();
+        DrawTargetTile();
+        DrawMiningProgress();
 
         _spriteBatch.End();
 
         // Draw UI (no camera transform)
         _spriteBatch.Begin();
         DrawDebugInfo();
+        DrawSelectedTile();
         _spriteBatch.End();
 
         base.Draw(gameTime);
@@ -239,6 +268,59 @@ public class TerrascentGame : Game
         int eyeX = _player.FacingDirection > 0 ? _player.Width - 8 : 4;
         Vector2 eyePos = new(_player.Position.X + eyeX, _player.Position.Y + 8);
         DrawRectangle(eyePos, 4, 4, Color.White);
+    }
+
+    private void DrawTargetTile()
+    {
+        // Draw outline around targeted tile
+        Vector2 tileWorldPos = WorldCoordinates.TileToWorld(_mouseTilePos);
+
+        Color outlineColor = _isTargetValid ? new Color(255, 255, 255, 150) : new Color(255, 0, 0, 100);
+
+        // Draw outline (4 edges)
+        int size = TILE_SIZE;
+        int thickness = 2;
+
+        // Top
+        DrawRectangle(tileWorldPos, size, thickness, outlineColor);
+        // Bottom
+        DrawRectangle(new Vector2(tileWorldPos.X, tileWorldPos.Y + size - thickness), size, thickness, outlineColor);
+        // Left
+        DrawRectangle(tileWorldPos, thickness, size, outlineColor);
+        // Right
+        DrawRectangle(new Vector2(tileWorldPos.X + size - thickness, tileWorldPos.Y), thickness, size, outlineColor);
+    }
+
+    private void DrawMiningProgress()
+    {
+        if (_mining.CurrentTarget == null || _mining.Progress <= 0)
+            return;
+
+        var target = _mining.CurrentTarget.Value;
+        Vector2 tileWorldPos = WorldCoordinates.TileToWorld(target);
+
+        // Draw darkening overlay based on progress
+        int crackedSize = (int)(TILE_SIZE * _mining.Progress);
+        Color crackColor = new Color(0, 0, 0, (int)(150 * _mining.Progress));
+
+        // Center the crack overlay
+        Vector2 crackPos = tileWorldPos + new Vector2((TILE_SIZE - crackedSize) / 2f);
+        DrawRectangle(crackPos, crackedSize, crackedSize, crackColor);
+    }
+
+    private void DrawSelectedTile()
+    {
+        // Draw selected tile indicator in corner
+        string text = $"Selected: {_building.SelectedTile} (1-5 to change)";
+
+        // Draw background
+        DrawRectangle(new Vector2(10, 10), 250, 25, new Color(0, 0, 0, 150));
+
+        // Draw colored square showing selected tile
+        Color tileColor = GetTileColor(_building.SelectedTile);
+        DrawRectangle(new Vector2(15, 15), 15, 15, tileColor);
+
+        // TODO: Draw text when font is available
     }
 
     private void DrawChunkBorders()
