@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 using Terrascent.Items;
 using Terrascent.Combat;
+using Terrascent.Items.Effects;
 
 namespace Terrascent.Entities;
 
@@ -38,6 +39,9 @@ public class Player : Entity
     // Weapon management
     public WeaponManager Weapons { get; } = new();
 
+    // Stats system (Risk of Rain style)
+    public PlayerStats Stats { get; } = new();
+
     public Player()
     {
         Width = 24;
@@ -56,6 +60,17 @@ public class Player : Entity
         Inventory.AddItem(ItemType.WoodSword, 1);
         Inventory.AddItem(ItemType.WoodSpear, 1);
         Inventory.AddItem(ItemType.WoodBow, 1);
+
+        // Stackable items for testing
+        Inventory.AddItem(ItemType.SoldiersSyringeItem, 3);  // +45% attack speed
+        Inventory.AddItem(ItemType.PaulsGoatHoofItem, 2);    // +28% move speed
+        Inventory.AddItem(ItemType.CritGlassesItem, 5);      // +50% crit chance
+
+        // Initialize stats
+        Stats.Recalculate(Inventory);
+
+        // Recalculate stats when inventory changes
+        Inventory.OnSlotChanged += _ => Stats.Recalculate(Inventory);
     }
 
     /// <summary>
@@ -71,8 +86,9 @@ public class Player : Entity
             FacingDirection = moveDir;
         }
 
-        // Calculate target velocity
-        float targetVelX = moveDir * MoveSpeed;
+        // Calculate target velocity using stats
+        float currentMoveSpeed = Stats.MoveSpeed > 0 ? Stats.MoveSpeed : MoveSpeed;
+        float targetVelX = moveDir * currentMoveSpeed;
 
         // Apply acceleration/friction based on ground state
         bool effectivelyGrounded = OnGround || _groundedFrames > 0;

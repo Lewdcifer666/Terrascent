@@ -205,6 +205,11 @@ public class TerrascentGame : Game
         _player.Inventory.AddItem(ItemType.WoodSpear, 1);
         _player.Inventory.AddItem(ItemType.WoodBow, 1);
 
+        // Stackable items for testing
+        _player.Inventory.AddItem(ItemType.SoldiersSyringeItem, 3);
+        _player.Inventory.AddItem(ItemType.PaulsGoatHoofItem, 2);
+        _player.Inventory.AddItem(ItemType.CritGlassesItem, 5);
+
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
         _player.SpawnAt(0, surfaceY);
@@ -231,6 +236,13 @@ public class TerrascentGame : Game
             System.Diagnostics.Debug.WriteLine($"Selected slot {_player.Inventory.SelectedSlot}: {selected.Type} x{selected.Count}");
             System.Diagnostics.Debug.WriteLine($"Is weapon? {WeaponRegistry.IsWeapon(selected.Type)}");
             System.Diagnostics.Debug.WriteLine($"Equipped weapon: {_player.Weapons.EquippedWeapon}");
+        }
+
+        if (_input.IsKeyPressed(Keys.Tab))
+        {
+            System.Diagnostics.Debug.WriteLine($"Stats: {_player.Stats.GetStatSummary()}");
+            System.Diagnostics.Debug.WriteLine($"Attack Speed: {_player.Stats.AttackSpeed:P0}");
+            System.Diagnostics.Debug.WriteLine($"Move Speed: {_player.Stats.MoveSpeed:F0}");
         }
 
         // Determine what action to take with left mouse
@@ -490,6 +502,30 @@ public class TerrascentGame : Game
             // Boomerangs
             ItemType.WoodBoomerang => new Color(170, 130, 80),
             ItemType.IronBoomerang => new Color(165, 165, 180),
+
+            // Stackable items - Common (white/gray)
+            ItemType.SoldiersSyringeItem => new Color(200, 50, 50),   // Red syringe
+            ItemType.TougherTimesItem => new Color(150, 150, 200),    // Blue bear
+            ItemType.BisonSteakItem => new Color(180, 80, 80),        // Meat red
+            ItemType.PaulsGoatHoofItem => new Color(139, 90, 60),     // Brown hoof
+            ItemType.CritGlassesItem => new Color(200, 200, 220),     // Glass/silver
+            ItemType.MonsterToothItem => new Color(220, 220, 200),    // Bone white
+
+            // Stackable items - Uncommon (green tint)
+            ItemType.HopooFeatherItem => new Color(100, 200, 100),    // Green feather
+            ItemType.PredatoryInstinctsItem => new Color(180, 100, 100), // Red instincts
+            ItemType.HarvestersScytheItem => new Color(150, 150, 180),// Steel scythe
+            ItemType.UkuleleItem => new Color(200, 150, 100),         // Wood ukulele
+            ItemType.AtgMissileItem => new Color(80, 120, 80),        // Military green
+
+            // Stackable items - Rare (blue/red tint)
+            ItemType.BrilliantBehemothItem => new Color(255, 100, 50),// Orange explosive
+            ItemType.ShapedGlassItem => new Color(200, 150, 255),     // Purple glass
+            ItemType.CestiusItem => new Color(200, 180, 100),         // Brass knuckles
+
+            // Stackable items - Legendary (orange/gold)
+            ItemType.SoulboundCatalystItem => new Color(255, 180, 50),// Gold catalyst
+            ItemType.FiftySevenLeafCloverItem => new Color(50, 255, 50), // Bright green
 
             _ => Color.Magenta
         };

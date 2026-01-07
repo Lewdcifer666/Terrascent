@@ -462,6 +462,154 @@ public static class ItemRegistry
             SellValue = 150,
             Damage = 13,
         },
+
+        // === Stackable Items - Common ===
+        [ItemType.SoldiersSyringeItem] = new ItemProperties
+        {
+            Name = "Soldier's Syringe",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        [ItemType.TougherTimesItem] = new ItemProperties
+        {
+            Name = "Tougher Times",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        [ItemType.BisonSteakItem] = new ItemProperties
+        {
+            Name = "Bison Steak",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        [ItemType.PaulsGoatHoofItem] = new ItemProperties
+        {
+            Name = "Paul's Goat Hoof",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        [ItemType.CritGlassesItem] = new ItemProperties
+        {
+            Name = "Lens-Maker's Glasses",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        [ItemType.MonsterToothItem] = new ItemProperties
+        {
+            Name = "Monster Tooth",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+        },
+
+        // === Stackable Items - Uncommon ===
+        [ItemType.HopooFeatherItem] = new ItemProperties
+        {
+            Name = "Hopoo Feather",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        [ItemType.PredatoryInstinctsItem] = new ItemProperties
+        {
+            Name = "Predatory Instincts",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        [ItemType.HarvestersScytheItem] = new ItemProperties
+        {
+            Name = "Harvester's Scythe",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        [ItemType.UkuleleItem] = new ItemProperties
+        {
+            Name = "Ukulele",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        [ItemType.AtgMissileItem] = new ItemProperties
+        {
+            Name = "ATG Missile Mk. 1",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        // === Stackable Items - Rare ===
+        [ItemType.BrilliantBehemothItem] = new ItemProperties
+        {
+            Name = "Brilliant Behemoth",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.ShapedGlassItem] = new ItemProperties
+        {
+            Name = "Shaped Glass",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.CestiusItem] = new ItemProperties
+        {
+            Name = "Cestus",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        // === Stackable Items - Legendary ===
+        [ItemType.SoulboundCatalystItem] = new ItemProperties
+        {
+            Name = "Soulbound Catalyst",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Legendary,
+            SellValue = 500,
+        },
+
+        [ItemType.FiftySevenLeafCloverItem] = new ItemProperties
+        {
+            Name = "57 Leaf Clover",
+            MaxStack = 999,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Legendary,
+            SellValue = 500,
+        },
     };
 
     /// <summary>

@@ -99,4 +99,45 @@ public enum ItemType : ushort
     // Boomerangs (570-579)
     WoodBoomerang = 570,
     IronBoomerang = 571,
+
+    // === Stackable Effect Items (600-799) ===
+    // Common (600-649)
+    SoldiersSyringeItem = 600,
+    TougherTimesItem = 601,
+    BisonSteakItem = 602,
+    PaulsGoatHoofItem = 603,
+    CritGlassesItem = 604,
+    MonsterToothItem = 605,
+    CautiousSlugItem = 606,
+    ArmorPlateItem = 607,
+    TriTipDaggerItem = 608,
+    BundleOfFireworksItem = 609,
+
+    // Uncommon (650-699)
+    HopooFeatherItem = 650,
+    PredatoryInstinctsItem = 651,
+    HarvestersScytheItem = 652,
+    UkuleleItem = 653,
+    AtgMissileItem = 654,
+    WillOTheWispItem = 655,
+    BandolierItem = 656,
+    WarHornItem = 657,
+    BerzerkersPauldronsItem = 658,
+    InfusionItem = 659,
+
+    // Rare (700-749)
+    BrilliantBehemothItem = 700,
+    ShapedGlassItem = 701,
+    CestiusItem = 702,
+    AlienHeadItem = 703,
+    HappiestMaskItem = 704,
+    FrostRelicItem = 705,
+    UnstableTeslaCoilItem = 706,
+
+    // Legendary (750-799)
+    SoulboundCatalystItem = 750,
+    FiftySevenLeafCloverItem = 751,
+    BrainStalksItem = 752,
+    HardlightAfterburnerItem = 753,
+    SentientMeatHookItem = 754,
 }
