@@ -111,6 +111,9 @@ public class TerrascentGame : Game
         _gameLoop.Update(deltaTime, FixedUpdate);
         VariableUpdate(deltaTime);
 
+        // Consume buffered input presses after processing
+        _input.ConsumeBufferedPresses();
+
         base.Update(gameTime);
     }
 
@@ -143,8 +146,7 @@ public class TerrascentGame : Game
         // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
 
-        // Consume buffered input presses after processing
-        _input.ConsumeBufferedPresses();
+        
     }
 
     private void VariableUpdate(float deltaTime)

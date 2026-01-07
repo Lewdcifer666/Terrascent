@@ -92,12 +92,6 @@ public abstract class Entity
         {
             CheckGroundBelow(chunks);
         }
-
-        // DEBUG: Log ground state changes
-        if (wasOnGround != OnGround)
-        {
-            System.Diagnostics.Debug.WriteLine($"[GROUND STATE] Changed: {wasOnGround} -> {OnGround}, VelY={Velocity.Y:F1}");
-        }
     }
 
     /// <summary>
