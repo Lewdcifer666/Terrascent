@@ -108,11 +108,13 @@ public class TerrascentGame : Game
             RegenerateWorld();
         }
 
-        _gameLoop.Update(deltaTime, FixedUpdate);
+        // FixedUpdate returns how many physics ticks ran this frame
+        int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
         VariableUpdate(deltaTime);
 
-        // Consume buffered input presses after processing
-        _input.ConsumeBufferedPresses();
+        // Only consume keyboard buffer if physics actually ran
+        // Mouse is always consumed since VariableUpdate always runs
+        _input.ConsumeBufferedPresses(consumeKeyboard: physicsUpdates > 0);
 
         base.Update(gameTime);
     }

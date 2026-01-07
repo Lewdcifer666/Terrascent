@@ -78,11 +78,17 @@ public class InputManager
     }
 
     /// <summary>
-    /// Call this at the end of FixedUpdate to clear consumed presses.
+    /// Call this at the end of Update to clear consumed presses.
     /// </summary>
-    public void ConsumeBufferedPresses()
+    /// <param name="consumeKeyboard">Only consume keyboard if FixedUpdate actually ran</param>
+    public void ConsumeBufferedPresses(bool consumeKeyboard = true)
     {
-        _bufferedKeyPresses.Clear();
+        if (consumeKeyboard)
+        {
+            _bufferedKeyPresses.Clear();
+        }
+
+        // Always consume mouse since VariableUpdate always runs
         _leftMousePressBuffered = false;
         _rightMousePressBuffered = false;
     }
