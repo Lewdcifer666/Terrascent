@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 using Terrascent.Items;
+using Terrascent.Combat;
 
 namespace Terrascent.Entities;
 
@@ -34,6 +35,9 @@ public class Player : Entity
     // Inventory
     public Inventory Inventory { get; } = new(40, 10);
 
+    // Weapon management
+    public WeaponManager Weapons { get; } = new();
+
     public Player()
     {
         Width = 24;
@@ -47,6 +51,11 @@ public class Player : Entity
         Inventory.AddItem(ItemType.Wood, 30);
         Inventory.AddItem(ItemType.Torch, 20);
         Inventory.AddItem(ItemType.WoodPickaxe, 1);
+
+        // Starting weapons for testing
+        Inventory.AddItem(ItemType.WoodSword, 1);
+        Inventory.AddItem(ItemType.WoodSpear, 1);
+        Inventory.AddItem(ItemType.WoodBow, 1);
     }
 
     /// <summary>
@@ -165,6 +174,34 @@ public class Player : Entity
         if (input.IsKeyPressed(Keys.D8)) Inventory.SelectSlot(7);
         if (input.IsKeyPressed(Keys.D9)) Inventory.SelectSlot(8);
         if (input.IsKeyPressed(Keys.D0)) Inventory.SelectSlot(9);
+    }
+
+    /// <summary>
+    /// Update equipped weapon based on selected hotbar item.
+    /// </summary>
+    public void UpdateEquippedWeapon()
+    {
+        var selectedStack = Inventory.SelectedItem;
+
+        if (selectedStack.IsEmpty)
+        {
+            Weapons.Unequip();
+            return;
+        }
+
+        // Check if selected item is a weapon
+        if (WeaponRegistry.IsWeapon(selectedStack.Type))
+        {
+            // Only re-equip if different weapon
+            if (Weapons.EquippedType != selectedStack.Type)
+            {
+                Weapons.Equip(selectedStack.Type);
+            }
+        }
+        else
+        {
+            Weapons.Unequip();
+        }
     }
 
     private void ExecuteJump()

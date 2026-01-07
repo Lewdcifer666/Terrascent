@@ -264,6 +264,204 @@ public static class ItemRegistry
             SellValue = 100,
             Damage = 12,
         },
+
+        [ItemType.IronSword] = new ItemProperties
+        {
+            Name = "Iron Sword",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 250,
+            Damage = 18,
+        },
+
+        // === Additional Swords ===
+        [ItemType.SilverSword] = new ItemProperties
+        {
+            Name = "Silver Sword",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 500,
+            Damage = 24,
+        },
+
+        [ItemType.GoldSword] = new ItemProperties
+        {
+            Name = "Gold Sword",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 800,
+            Damage = 28,
+        },
+
+        // === Spears ===
+        [ItemType.WoodSpear] = new ItemProperties
+        {
+            Name = "Wooden Spear",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 15,
+            Damage = 7,
+        },
+
+        [ItemType.CopperSpear] = new ItemProperties
+        {
+            Name = "Copper Spear",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 80,
+            Damage = 11,
+        },
+
+        [ItemType.IronSpear] = new ItemProperties
+        {
+            Name = "Iron Spear",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 200,
+            Damage = 16,
+        },
+
+        // === Battle Axes ===
+        [ItemType.BattleAxe] = new ItemProperties
+        {
+            Name = "Battle Axe",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+            Damage = 12,
+        },
+
+        // === Bows ===
+        [ItemType.WoodBow] = new ItemProperties
+        {
+            Name = "Wooden Bow",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 20,
+            Damage = 6,
+        },
+
+        [ItemType.CopperBow] = new ItemProperties
+        {
+            Name = "Copper Bow",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 90,
+            Damage = 10,
+        },
+
+        [ItemType.IronBow] = new ItemProperties
+        {
+            Name = "Iron Bow",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 180,
+            Damage = 14,
+        },
+
+        // === Whips ===
+        [ItemType.LeatherWhip] = new ItemProperties
+        {
+            Name = "Leather Whip",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 30,
+            Damage = 8,
+        },
+
+        [ItemType.ChainWhip] = new ItemProperties
+        {
+            Name = "Chain Whip",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 150,
+            Damage = 14,
+        },
+
+        // === Staves ===
+        [ItemType.WoodStaff] = new ItemProperties
+        {
+            Name = "Wooden Staff",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 25,
+            Damage = 5,
+        },
+
+        [ItemType.ApprenticeStaff] = new ItemProperties
+        {
+            Name = "Apprentice Staff",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 120,
+            Damage = 10,
+        },
+
+        [ItemType.MageStaff] = new ItemProperties
+        {
+            Name = "Mage Staff",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Rare,
+            SellValue = 350,
+            Damage = 18,
+        },
+
+        // === Gloves ===
+        [ItemType.LeatherGloves] = new ItemProperties
+        {
+            Name = "Leather Gloves",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 20,
+            Damage = 5,
+        },
+
+        [ItemType.IronKnuckles] = new ItemProperties
+        {
+            Name = "Iron Knuckles",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 100,
+            Damage = 10,
+        },
+
+        // === Boomerangs ===
+        [ItemType.WoodBoomerang] = new ItemProperties
+        {
+            Name = "Wooden Boomerang",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 30,
+            Damage = 7,
+        },
+
+        [ItemType.IronBoomerang] = new ItemProperties
+        {
+            Name = "Iron Boomerang",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Common,
+            SellValue = 150,
+            Damage = 13,
+        },
     };
 
     /// <summary>

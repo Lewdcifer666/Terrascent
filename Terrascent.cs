@@ -8,6 +8,7 @@ using Terrascent.Saves;
 using Terrascent.Systems;
 using Terrascent.World;
 using Terrascent.World.Generation;
+using Terrascent.Combat;
 
 namespace Terrascent;
 
@@ -32,6 +33,8 @@ public class TerrascentGame : Game
     // Systems
     private MiningSystem _mining = null!;
     private BuildingSystem _building = null!;
+
+    private CombatSystem _combat = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -120,6 +123,13 @@ public class TerrascentGame : Game
         // Create systems
         _mining = new MiningSystem();
         _building = new BuildingSystem();
+        _combat = new CombatSystem();
+
+        // Subscribe to combat events
+        _combat.OnAttack += args =>
+        {
+            System.Diagnostics.Debug.WriteLine($"ATTACK: {args.Attack.Name} dealing {args.Damage} damage");
+        };
 
         System.Diagnostics.Debug.WriteLine($"World Seed: {_worldSeed}");
         System.Diagnostics.Debug.WriteLine($"Player position: {_player.Position}");
@@ -191,6 +201,9 @@ public class TerrascentGame : Game
         _player.Inventory.AddItem(ItemType.Wood, 30);
         _player.Inventory.AddItem(ItemType.Torch, 20);
         _player.Inventory.AddItem(ItemType.WoodPickaxe, 1);
+        _player.Inventory.AddItem(ItemType.WoodSword, 1);
+        _player.Inventory.AddItem(ItemType.WoodSpear, 1);
+        _player.Inventory.AddItem(ItemType.WoodBow, 1);
 
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
@@ -208,21 +221,43 @@ public class TerrascentGame : Game
         _player.Update(dt);
         _player.ApplyMovement(dt, _chunkManager);
 
-        if (_input.IsLeftMouseDown() && _isTargetValid)
+        // Update equipped weapon based on hotbar selection
+        _player.UpdateEquippedWeapon();
+
+        // Determine what action to take with left mouse
+        bool hasWeapon = _player.Weapons.HasWeaponEquipped;
+        bool leftMouseDown = _input.IsLeftMouseDown();
+        bool leftMousePressed = _input.IsLeftMousePressed();
+
+        if (hasWeapon)
         {
-            var tile = _chunkManager.GetTileAt(_mouseTilePos);
-            if (!tile.IsAir)
-            {
-                bool mined = _mining.UpdateMining(_mouseTilePos, _chunkManager, _player, dt);
-                if (mined)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Mined tile at {_mouseTilePos}");
-                }
-            }
+            // Combat mode - weapon is equipped
+            _mining.CancelMining();
+            _combat.Update(dt, _player, _player.Weapons.EquippedWeapon, leftMousePressed, leftMouseDown);
         }
         else
         {
-            _mining.CancelMining();
+            // Mining/building mode - no weapon equipped
+            if (leftMouseDown && _isTargetValid)
+            {
+                var tile = _chunkManager.GetTileAt(_mouseTilePos);
+                if (!tile.IsAir)
+                {
+                    bool mined = _mining.UpdateMining(_mouseTilePos, _chunkManager, _player, dt);
+                    if (mined)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Mined tile at {_mouseTilePos}");
+                    }
+                }
+                else
+                {
+                    _mining.CancelMining();
+                }
+            }
+            else
+            {
+                _mining.CancelMining();
+            }
         }
     }
 
@@ -317,6 +352,79 @@ public class TerrascentGame : Game
         }
     }
 
+    private void DrawChargeBar()
+    {
+        var weapon = _player.Weapons.EquippedWeapon;
+        if (weapon == null || !weapon.IsCharging)
+            return;
+
+        int barWidth = 100;
+        int barHeight = 8;
+        int x = (_graphics.PreferredBackBufferWidth - barWidth) / 2;
+        int y = _graphics.PreferredBackBufferHeight - 80;
+
+        // Background
+        DrawRectangle(new Vector2(x - 2, y - 2), barWidth + 4, barHeight + 4, new Color(0, 0, 0, 200));
+
+        // Charge segments (one per max charge level)
+        int maxLevel = Math.Max(1, weapon.MaxChargeLevel);
+        int segmentWidth = barWidth / maxLevel;
+
+        for (int i = 0; i < maxLevel; i++)
+        {
+            int segX = x + i * segmentWidth;
+            Color segColor;
+
+            if (i < weapon.CurrentChargeLevel)
+            {
+                // Fully charged segment
+                segColor = GetChargeLevelColor(i + 1);
+            }
+            else if (i == weapon.CurrentChargeLevel)
+            {
+                // Currently charging segment
+                float progress = weapon.ChargeProgress;
+                segColor = Color.Lerp(new Color(40, 40, 40), GetChargeLevelColor(i + 1), progress);
+            }
+            else
+            {
+                // Not yet reached
+                segColor = new Color(40, 40, 40);
+            }
+
+            DrawRectangle(new Vector2(segX + 1, y), segmentWidth - 2, barHeight, segColor);
+        }
+
+        // Draw current charge level number
+        if (weapon.CurrentChargeLevel > 0)
+        {
+            // Visual indicator of charge level
+            int indicatorSize = 16 + weapon.CurrentChargeLevel * 2;
+            Color indicatorColor = GetChargeLevelColor(weapon.CurrentChargeLevel);
+            DrawRectangle(
+                new Vector2(x + barWidth / 2 - indicatorSize / 2, y - indicatorSize - 4),
+                indicatorSize, indicatorSize,
+                indicatorColor * 0.7f
+            );
+        }
+    }
+
+    private static Color GetChargeLevelColor(int level)
+    {
+        return level switch
+        {
+            1 => Color.LightGreen,
+            2 => Color.Green,
+            3 => Color.Cyan,
+            4 => Color.Blue,
+            5 => Color.Purple,
+            6 => Color.Magenta,
+            7 => Color.Orange,
+            8 => Color.Gold,
+            _ => Color.White,
+        };
+    }
+
     private static Color GetItemColor(ItemType type)
     {
         return type switch
@@ -367,6 +475,7 @@ public class TerrascentGame : Game
         // Draw UI (no camera transform)
         _spriteBatch.Begin();
         DrawHotbar();
+        DrawChargeBar();
         DrawDebugInfo();
         _spriteBatch.End();
 

@@ -61,7 +61,42 @@ public enum ItemType : ushort
     HealingPotion = 401,
 
     // === Weapons (500-599) ===
+    // Swords (500-509)
     WoodSword = 500,
     CopperSword = 501,
     IronSword = 502,
+    SilverSword = 503,
+    GoldSword = 504,
+
+    // Spears (510-519)
+    WoodSpear = 510,
+    CopperSpear = 511,
+    IronSpear = 512,
+
+    // Axes (520-529)
+    BattleAxe = 520,
+    CopperBattleAxe = 521,
+    IronBattleAxe = 522,
+
+    // Bows (530-539)
+    WoodBow = 530,
+    CopperBow = 531,
+    IronBow = 532,
+
+    // Whips (540-549)
+    LeatherWhip = 540,
+    ChainWhip = 541,
+
+    // Staves (550-559)
+    WoodStaff = 550,
+    ApprenticeStaff = 551,
+    MageStaff = 552,
+
+    // Gloves (560-569)
+    LeatherGloves = 560,
+    IronKnuckles = 561,
+
+    // Boomerangs (570-579)
+    WoodBoomerang = 570,
+    IronBoomerang = 571,
 }
