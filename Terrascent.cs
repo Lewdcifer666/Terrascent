@@ -375,25 +375,39 @@ public class TerrascentGame : Game
 
     private void TryInteractWithChest()
     {
+        // Find the closest chest in range
+        ChestEntity? closestChest = null;
+        float closestDistance = float.MaxValue;
+
         foreach (var chest in _chests)
         {
             if (chest.IsOpened || !chest.IsInRange(_player))
                 continue;
 
-            int cost = chest.GetCost(_chestManager);
+            float distance = Vector2.Distance(_player.Center, chest.Center);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestChest = chest;
+            }
+        }
+
+        // Interact with the closest chest
+        if (closestChest != null)
+        {
+            int cost = closestChest.GetCost(_chestManager);
             if (_player.Currency.CanAfford(cost))
             {
-                var drop = chest.TryOpen(_chestManager, _player.Currency, _player.Stats.LuckBonus);
+                var drop = closestChest.TryOpen(_chestManager, _player.Currency, _player.Stats.LuckBonus);
                 if (drop.HasValue)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Opened chest for {cost} gold!");
+                    System.Diagnostics.Debug.WriteLine($"Opened {closestChest.ChestType} chest for {cost} gold!");
                 }
             }
             else
             {
                 System.Diagnostics.Debug.WriteLine($"Can't afford chest! Cost: {cost}, Gold: {_player.Currency.Gold}");
             }
-            break; // Only interact with one chest per press
         }
     }
 
@@ -827,10 +841,30 @@ public class TerrascentGame : Game
     /// </summary>
     private void DrawChestUI()
     {
+        // First, find the closest chest (same logic as TryInteractWithChest)
+        ChestEntity? closestChest = null;
+        float closestDistance = float.MaxValue;
+
         foreach (var chest in _chests)
         {
             if (chest.IsOpened || !chest.IsInRange(_player))
                 continue;
+
+            float distance = Vector2.Distance(_player.Center, chest.Center);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestChest = chest;
+            }
+        }
+
+        // Draw UI for all chests in range, but highlight the closest
+        foreach (var chest in _chests)
+        {
+            if (chest.IsOpened || !chest.IsInRange(_player))
+                continue;
+
+            bool isClosest = chest == closestChest;
 
             // Convert chest world position to screen position
             Vector2 screenPos = _camera.WorldToScreen(chest.Position);
@@ -839,24 +873,43 @@ public class TerrascentGame : Game
             bool canAfford = _player.Currency.CanAfford(cost);
 
             // Draw cost popup above chest
-            int popupWidth = 60;
+            int popupWidth = isClosest ? 70 : 50;
             int popupHeight = 20;
             int popupX = (int)screenPos.X - popupWidth / 2 + chest.Width / 2;
             int popupY = (int)screenPos.Y - popupHeight - 8;
 
-            // Background
-            Color bgColor = canAfford ? new Color(0, 60, 0, 200) : new Color(60, 0, 0, 200);
+            // Background - brighter for closest chest
+            Color bgColor;
+            if (isClosest)
+            {
+                bgColor = canAfford ? new Color(0, 100, 0, 220) : new Color(100, 0, 0, 220);
+            }
+            else
+            {
+                bgColor = new Color(40, 40, 40, 160); // Dimmed for non-closest
+            }
             DrawRectangle(new Vector2(popupX, popupY), popupWidth, popupHeight, bgColor);
 
             // Gold icon
-            DrawRectangle(new Vector2(popupX + 4, popupY + 6), 8, 8, Color.Gold);
+            DrawRectangle(new Vector2(popupX + 4, popupY + 6), 8, 8, isClosest ? Color.Gold : Color.Gray);
 
             // Cost text
-            Color textColor = canAfford ? Color.LightGreen : Color.Red;
+            Color textColor;
+            if (isClosest)
+            {
+                textColor = canAfford ? Color.LightGreen : Color.Red;
+            }
+            else
+            {
+                textColor = new Color(150, 150, 150); // Dimmed
+            }
             InventoryUI.DrawText(_spriteBatch, _pixelTexture, cost.ToString(), popupX + 16, popupY + 6, textColor);
 
-            // "Press E" hint
-            InventoryUI.DrawText(_spriteBatch, _pixelTexture, "[E]", popupX + popupWidth - 20, popupY + 6, new Color(180, 180, 180));
+            // "Press E" hint - only show for closest chest
+            if (isClosest)
+            {
+                InventoryUI.DrawText(_spriteBatch, _pixelTexture, "[E]", popupX + popupWidth - 22, popupY + 6, Color.Yellow);
+            }
         }
     }
 
@@ -884,8 +937,8 @@ public class TerrascentGame : Game
         var color = _difficultyManager.DifficultyColor;
         Color diffColor = new Color(color.R, color.G, color.B);
 
-        // Background
-        DrawRectangle(new Vector2(x, y), 100, 24, new Color(0, 0, 0, 180));
+        // Background (extended to include time)
+        DrawRectangle(new Vector2(x, y), 100, 40, new Color(0, 0, 0, 180));
 
         // Difficulty indicator bar
         float fillPercent = Math.Min(_difficultyManager.Coefficient / 5f, 1f);
@@ -894,14 +947,11 @@ public class TerrascentGame : Game
         // Difficulty tier text
         InventoryUI.DrawText(_spriteBatch, _pixelTexture, _difficultyManager.DifficultyTier.ToUpper(), x + 4, y + 8, Color.White);
 
-        // Time display below difficulty bar
+        // Time display below difficulty bar - brighter color
         int minutes = (int)(_difficultyManager.ElapsedTime / 60f);
         int seconds = (int)(_difficultyManager.ElapsedTime % 60f);
         string timeText = $"{minutes}:{seconds:D2}";
-        InventoryUI.DrawText(_spriteBatch, _pixelTexture, timeText, x + 4, y + 28, new Color(180, 180, 180));
-
-        // Extend background to fit time
-        DrawRectangle(new Vector2(x, y + 24), 100, 16, new Color(0, 0, 0, 140));
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, timeText, x + 4, y + 28, Color.White);
     }
 
     private static Color GetTileColor(TileType type)
