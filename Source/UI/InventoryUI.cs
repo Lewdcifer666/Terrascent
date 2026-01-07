@@ -393,7 +393,7 @@ public class InventoryUI
     }
 
     /// <summary>
-    /// Draw a single digit using pixel art style.
+    /// Draw a single digit using pixel patterns.
     /// </summary>
     public static void DrawDigit(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, int digit, Color color)
     {
@@ -588,7 +588,7 @@ public class InventoryUI
     /// <summary>
     /// Draw text using simple pixel font.
     /// </summary>
-    private static void DrawText(SpriteBatch spriteBatch, Texture2D pixelTexture, string text, int x, int y, Color color)
+    public static void DrawText(SpriteBatch spriteBatch, Texture2D pixelTexture, string text, int x, int y, Color color)
     {
         int charWidth = 5;
         int spacing = 1;
@@ -623,7 +623,7 @@ public class InventoryUI
     /// <summary>
     /// Draw a letter using pixel patterns.
     /// </summary>
-    private static void DrawLetter(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char letter, Color color)
+    public static void DrawLetter(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char letter, Color color)
     {
         // Simplified 5x7 letter patterns for A-Z
         bool[,] pattern = letter switch
@@ -670,9 +670,9 @@ public class InventoryUI
     }
 
     /// <summary>
-    /// Draw common symbols.
+    /// Draw special symbols.
     /// </summary>
-    private static void DrawSymbol(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char symbol, Color color)
+    public static void DrawSymbol(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char symbol, Color color)
     {
         bool[,] pattern = symbol switch
         {

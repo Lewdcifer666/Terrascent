@@ -168,20 +168,25 @@ public class TerrascentGame : Game
 
     private void SpawnTestChest()
     {
-        // Spawn a chest near player spawn point
-        int spawnX = 2; // A couple tiles to the right of spawn
-        int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
+        // Spawn chests near player spawn point
+        // Chests are 32px tall (2 tiles), so we place them 2 tiles above surface
+        // so their bottom edge rests ON TOP of the grass
+        int spawnX = 2;
+        int surfaceY1 = _worldGenerator.GetSurfaceHeight(spawnX);
+        int surfaceY2 = _worldGenerator.GetSurfaceHeight(spawnX + 3);
+        int surfaceY3 = _worldGenerator.GetSurfaceHeight(spawnX + 6);
 
-        var smallChest = new ChestEntity(ChestType.Small, new Point(spawnX, surfaceY - 1));
+        // Position = surfaceY - 2 so bottom of chest sits on grass
+        var smallChest = new ChestEntity(ChestType.Small, new Point(spawnX, surfaceY1 - 2));
         _chests.Add(smallChest);
 
-        var largeChest = new ChestEntity(ChestType.Large, new Point(spawnX + 3, surfaceY - 1));
+        var largeChest = new ChestEntity(ChestType.Large, new Point(spawnX + 3, surfaceY2 - 2));
         _chests.Add(largeChest);
 
-        var equipChest = new ChestEntity(ChestType.Equipment, new Point(spawnX + 6, surfaceY - 1));
+        var equipChest = new ChestEntity(ChestType.Equipment, new Point(spawnX + 6, surfaceY3 - 2));
         _chests.Add(equipChest);
 
-        System.Diagnostics.Debug.WriteLine($"Spawned 3 test chests near ({spawnX}, {surfaceY})");
+        System.Diagnostics.Debug.WriteLine($"Spawned 3 test chests on surface");
     }
 
     protected override void LoadContent()
@@ -685,6 +690,7 @@ public class TerrascentGame : Game
         DrawChargeBar();
         DrawGoldDisplay();
         DrawDifficultyDisplay();
+        DrawChestUI();  // Chest interaction prompts (in screen space)
         DrawDebugInfo();
 
         // Draw UI panels
@@ -810,19 +816,47 @@ public class TerrascentGame : Game
             );
             DrawRectangle(chest.Position, chest.Width, 8, lidColor);
 
-            // Draw interaction hint if in range and not opened
-            if (!chest.IsOpened && chest.IsInRange(_player))
-            {
-                // Draw cost above chest
-                int cost = chest.GetCost(_chestManager);
-                Vector2 textPos = new Vector2(chest.Position.X, chest.Position.Y - 16);
+            // Draw lock/keyhole detail
+            DrawRectangle(new Vector2(chest.Position.X + 12, chest.Position.Y + 12), 8, 10, new Color(60, 60, 60));
+            DrawRectangle(new Vector2(chest.Position.X + 14, chest.Position.Y + 10), 4, 4, Color.Gold);
+        }
+    }
 
-                // Background
-                DrawRectangle(textPos, 40, 12, new Color(0, 0, 0, 180));
+    /// <summary>
+    /// Draw chest interaction UI (called in screen space, not world space).
+    /// </summary>
+    private void DrawChestUI()
+    {
+        foreach (var chest in _chests)
+        {
+            if (chest.IsOpened || !chest.IsInRange(_player))
+                continue;
 
-                // Gold icon (small yellow square)
-                DrawRectangle(new Vector2(textPos.X + 2, textPos.Y + 2), 8, 8, Color.Gold);
-            }
+            // Convert chest world position to screen position
+            Vector2 screenPos = _camera.WorldToScreen(chest.Position);
+
+            int cost = chest.GetCost(_chestManager);
+            bool canAfford = _player.Currency.CanAfford(cost);
+
+            // Draw cost popup above chest
+            int popupWidth = 60;
+            int popupHeight = 20;
+            int popupX = (int)screenPos.X - popupWidth / 2 + chest.Width / 2;
+            int popupY = (int)screenPos.Y - popupHeight - 8;
+
+            // Background
+            Color bgColor = canAfford ? new Color(0, 60, 0, 200) : new Color(60, 0, 0, 200);
+            DrawRectangle(new Vector2(popupX, popupY), popupWidth, popupHeight, bgColor);
+
+            // Gold icon
+            DrawRectangle(new Vector2(popupX + 4, popupY + 6), 8, 8, Color.Gold);
+
+            // Cost text
+            Color textColor = canAfford ? Color.LightGreen : Color.Red;
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, cost.ToString(), popupX + 16, popupY + 6, textColor);
+
+            // "Press E" hint
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, "[E]", popupX + popupWidth - 20, popupY + 6, new Color(180, 180, 180));
         }
     }
 
@@ -837,8 +871,9 @@ public class TerrascentGame : Game
         // Gold icon
         DrawRectangle(new Vector2(x + 4, y + 4), 16, 16, Color.Gold);
 
-        // Gold amount (would need font, just show placeholder for now)
-        // For now, we'll use the debug display
+        // Gold amount text
+        string goldText = _player.Currency.Gold.ToString();
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, goldText, x + 24, y + 8, Color.White);
     }
 
     private void DrawDifficultyDisplay()
@@ -855,6 +890,18 @@ public class TerrascentGame : Game
         // Difficulty indicator bar
         float fillPercent = Math.Min(_difficultyManager.Coefficient / 5f, 1f);
         DrawRectangle(new Vector2(x + 2, y + 2), (int)(96 * fillPercent), 20, diffColor);
+
+        // Difficulty tier text
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, _difficultyManager.DifficultyTier.ToUpper(), x + 4, y + 8, Color.White);
+
+        // Time display below difficulty bar
+        int minutes = (int)(_difficultyManager.ElapsedTime / 60f);
+        int seconds = (int)(_difficultyManager.ElapsedTime % 60f);
+        string timeText = $"{minutes}:{seconds:D2}";
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, timeText, x + 4, y + 28, new Color(180, 180, 180));
+
+        // Extend background to fit time
+        DrawRectangle(new Vector2(x, y + 24), 100, 16, new Color(0, 0, 0, 140));
     }
 
     private static Color GetTileColor(TileType type)
