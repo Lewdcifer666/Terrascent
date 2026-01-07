@@ -391,13 +391,17 @@ public class TerrascentGame : Game
                 int itemSize = slotSize - 8;
                 DrawRectangle(new Vector2(x + 4, y + 4), itemSize, itemSize, itemColor);
 
-                // Draw stack count (bottom right) - visual indicator with size
+                // Draw stack count (bottom right) with actual numbers
                 if (stack.Count > 1)
                 {
-                    int countWidth = stack.Count >= 100 ? 20 : (stack.Count >= 10 ? 14 : 8);
-                    DrawRectangle(new Vector2(x + slotSize - countWidth - 2, y + slotSize - 10), countWidth, 8, new Color(0, 0, 0, 200));
+                    Rectangle slotBounds = new(x, y, slotSize, slotSize);
+                    InventoryUI.DrawStackNumber(_spriteBatch, _pixelTexture, slotBounds, stack.Count);
                 }
             }
+
+            // Draw hotkey number (top left) - 1-9 then 0
+            Rectangle bounds = new(x, y, slotSize, slotSize);
+            InventoryUI.DrawSlotNumber(_spriteBatch, _pixelTexture, bounds, i);
         }
     }
 

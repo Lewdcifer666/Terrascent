@@ -369,7 +369,7 @@ public class InventoryUI
     /// <summary>
     /// Draw stack count number using simple digit representation.
     /// </summary>
-    private static void DrawStackNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle slotBounds, int count)
+    public static void DrawStackNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle slotBounds, int count)
     {
         string countStr = count.ToString();
         int digitWidth = 5;
@@ -395,7 +395,7 @@ public class InventoryUI
     /// <summary>
     /// Draw a single digit using pixel art style.
     /// </summary>
-    private static void DrawDigit(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, int digit, Color color)
+    public static void DrawDigit(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, int digit, Color color)
     {
         // Simple 5x7 pixel font patterns for digits 0-9
         bool[,] patterns = digit switch
@@ -428,7 +428,7 @@ public class InventoryUI
     /// <summary>
     /// Draw slot number indicator for hotbar.
     /// </summary>
-    private static void DrawSlotNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, int slotIndex)
+    public static void DrawSlotNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, int slotIndex)
     {
         int number = (slotIndex + 1) % 10; // 1-9, then 0
 
