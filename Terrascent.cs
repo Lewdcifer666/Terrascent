@@ -224,6 +224,15 @@ public class TerrascentGame : Game
         // Update equipped weapon based on hotbar selection
         _player.UpdateEquippedWeapon();
 
+        // Debug: Show what's selected
+        var selected = _player.Inventory.SelectedItem;
+        if (_input.IsKeyPressed(Keys.Tab))
+        {
+            System.Diagnostics.Debug.WriteLine($"Selected slot {_player.Inventory.SelectedSlot}: {selected.Type} x{selected.Count}");
+            System.Diagnostics.Debug.WriteLine($"Is weapon? {WeaponRegistry.IsWeapon(selected.Type)}");
+            System.Diagnostics.Debug.WriteLine($"Equipped weapon: {_player.Weapons.EquippedWeapon}");
+        }
+
         // Determine what action to take with left mouse
         bool hasWeapon = _player.Weapons.HasWeaponEquipped;
         bool leftMouseDown = _input.IsLeftMouseDown();
@@ -429,6 +438,7 @@ public class TerrascentGame : Game
     {
         return type switch
         {
+            // Blocks
             ItemType.Dirt => new Color(139, 90, 43),
             ItemType.Stone => new Color(128, 128, 128),
             ItemType.Sand => new Color(238, 214, 175),
@@ -438,8 +448,49 @@ public class TerrascentGame : Game
             ItemType.IronOre => new Color(165, 142, 142),
             ItemType.SilverOre => new Color(192, 192, 210),
             ItemType.GoldOre => new Color(255, 215, 0),
+
+            // Tools
             ItemType.WoodPickaxe => new Color(139, 90, 43),
             ItemType.CopperPickaxe => new Color(184, 115, 51),
+            ItemType.IronPickaxe => new Color(150, 150, 160),
+
+            // Swords (silver-blue tint)
+            ItemType.WoodSword => new Color(180, 140, 100),
+            ItemType.CopperSword => new Color(200, 130, 80),
+            ItemType.IronSword => new Color(180, 180, 195),
+            ItemType.SilverSword => new Color(210, 210, 230),
+            ItemType.GoldSword => new Color(255, 215, 0),
+
+            // Spears (brown shaft tint)
+            ItemType.WoodSpear => new Color(160, 120, 80),
+            ItemType.CopperSpear => new Color(190, 120, 70),
+            ItemType.IronSpear => new Color(170, 170, 185),
+
+            // Axes
+            ItemType.BattleAxe => new Color(140, 100, 70),
+
+            // Bows (wood brown)
+            ItemType.WoodBow => new Color(150, 100, 60),
+            ItemType.CopperBow => new Color(180, 110, 60),
+            ItemType.IronBow => new Color(160, 160, 175),
+
+            // Whips (leather brown)
+            ItemType.LeatherWhip => new Color(139, 90, 60),
+            ItemType.ChainWhip => new Color(170, 170, 180),
+
+            // Staves (magical purple)
+            ItemType.WoodStaff => new Color(120, 90, 140),
+            ItemType.ApprenticeStaff => new Color(140, 100, 180),
+            ItemType.MageStaff => new Color(160, 80, 200),
+
+            // Gloves (leather tan)
+            ItemType.LeatherGloves => new Color(180, 140, 100),
+            ItemType.IronKnuckles => new Color(160, 160, 170),
+
+            // Boomerangs
+            ItemType.WoodBoomerang => new Color(170, 130, 80),
+            ItemType.IronBoomerang => new Color(165, 165, 180),
+
             _ => Color.Magenta
         };
     }
