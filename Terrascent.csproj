@@ -37,6 +37,5 @@
     <Folder Include="Content\Data\" />
     <Folder Include="Content\Sounds\" />
     <Folder Include="Content\Textures\" />
-    <Folder Include="Source\UI\" />
   </ItemGroup>
 </Project>

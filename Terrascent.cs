@@ -9,6 +9,7 @@ using Terrascent.Systems;
 using Terrascent.World;
 using Terrascent.World.Generation;
 using Terrascent.Combat;
+using Terrascent.UI;
 
 namespace Terrascent;
 
@@ -22,6 +23,7 @@ public class TerrascentGame : Game
     private InputManager _input = null!;
     private Camera _camera = null!;
     private SaveManager _saveManager = null!;
+    private UIManager _uiManager = null!;
 
     // World
     private ChunkManager _chunkManager = null!;
@@ -125,6 +127,9 @@ public class TerrascentGame : Game
         _building = new BuildingSystem();
         _combat = new CombatSystem();
 
+        // Create UI Manager
+        _uiManager = new UIManager(_player, _input);
+
         // Subscribe to combat events
         _combat.OnAttack += args =>
         {
@@ -145,6 +150,13 @@ public class TerrascentGame : Game
 
         _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
         _pixelTexture.SetData([Color.White]);
+
+        // Initialize UI (needs graphics device ready)
+        _uiManager.Initialize(
+            GraphicsDevice,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
     }
 
     protected override void Update(GameTime gameTime)
@@ -153,7 +165,11 @@ public class TerrascentGame : Game
 
         _input.Update();
 
-        if (_input.IsKeyPressed(Keys.Escape))
+        // Update UI first (may consume input)
+        _uiManager.Update(deltaTime);
+
+        // Only exit with Escape if no UI is open
+        if (_input.IsKeyPressed(Keys.Escape) && !_uiManager.IsAnyPanelOpen)
             Exit();
 
         // Save game (F6)
@@ -168,10 +184,19 @@ public class TerrascentGame : Game
             RegenerateWorld();
         }
 
-        int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
-        VariableUpdate(deltaTime);
-
-        _input.ConsumeBufferedPresses(consumeKeyboard: physicsUpdates > 0);
+        // Only run gameplay updates if no UI panel is blocking
+        if (!_uiManager.IsAnyPanelOpen)
+        {
+            int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
+            VariableUpdate(deltaTime);
+            _input.ConsumeBufferedPresses(consumeKeyboard: physicsUpdates > 0);
+        }
+        else
+        {
+            // Still update camera when UI is open
+            _camera.Update(deltaTime);
+            _input.ConsumeBufferedPresses(consumeKeyboard: true);
+        }
 
         base.Update(gameTime);
     }
@@ -185,6 +210,10 @@ public class TerrascentGame : Game
 
     private void RegenerateWorld()
     {
+        // Close inventory if open
+        if (_uiManager.IsInventoryOpen)
+            _uiManager.CloseInventory();
+
         // Delete existing save
         _saveManager.DeleteSave();
 
@@ -322,7 +351,6 @@ public class TerrascentGame : Game
         }
     }
 
-    // Add new Draw method for hotbar:
     private void DrawHotbar()
     {
         int slotSize = 40;
@@ -561,9 +589,19 @@ public class TerrascentGame : Game
 
         // Draw UI (no camera transform)
         _spriteBatch.Begin();
-        DrawHotbar();
+
+        // Always draw hotbar (unless inventory is open, then inventory shows hotbar)
+        if (!_uiManager.IsInventoryOpen)
+        {
+            DrawHotbar();
+        }
+
         DrawChargeBar();
         DrawDebugInfo();
+
+        // Draw UI panels
+        _uiManager.Draw(_spriteBatch, _pixelTexture, _input.MousePositionV);
+
         _spriteBatch.End();
 
         base.Draw(gameTime);
@@ -583,6 +621,10 @@ public class TerrascentGame : Game
 
     private void DrawTargetTile()
     {
+        // Don't draw target tile when inventory is open
+        if (_uiManager.IsAnyPanelOpen)
+            return;
+
         // Draw outline around targeted tile
         Vector2 tileWorldPos = WorldCoordinates.TileToWorld(_mouseTilePos);
 
