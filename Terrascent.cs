@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 using Terrascent.Entities;
 using Terrascent.Items;
+using Terrascent.Saves;
 using Terrascent.Systems;
 using Terrascent.World;
 using Terrascent.World.Generation;
@@ -19,6 +20,7 @@ public class TerrascentGame : Game
     private GameLoop _gameLoop = null!;
     private InputManager _input = null!;
     private Camera _camera = null!;
+    private SaveManager _saveManager = null!;
 
     // World
     private ChunkManager _chunkManager = null!;
@@ -62,36 +64,65 @@ public class TerrascentGame : Game
 
         _gameLoop = new GameLoop();
         _input = new InputManager();
+        _saveManager = new SaveManager();
 
-        // Create world generator
-        _worldGenerator = new WorldGenerator(_worldSeed);
+        // Create player first (needed for loading)
+        _player = new Player();
 
-        // Create chunk manager with generator
-        _chunkManager = new ChunkManager
+        // Try to load existing world
+        int? loadedSeed = _saveManager.LoadWorldData();
+
+        if (loadedSeed.HasValue)
         {
-            Generator = _worldGenerator,
-            LoadRadius = 4
-        };
+            // Load existing world
+            _worldSeed = loadedSeed.Value;
+            System.Diagnostics.Debug.WriteLine($"Loading existing world with seed: {_worldSeed}");
+
+            _worldGenerator = new WorldGenerator(_worldSeed);
+            _chunkManager = new ChunkManager
+            {
+                Generator = _worldGenerator,
+                SaveManager = _saveManager,
+                LoadRadius = 4
+            };
+
+            // Load player data
+            if (!_saveManager.LoadPlayer(_player))
+            {
+                // No player save, spawn at surface
+                int surfaceY = _worldGenerator.GetSurfaceHeight(0);
+                _player.SpawnAt(0, surfaceY);
+            }
+        }
+        else
+        {
+            // Create new world
+            System.Diagnostics.Debug.WriteLine($"Creating new world with seed: {_worldSeed}");
+
+            _worldGenerator = new WorldGenerator(_worldSeed);
+            _chunkManager = new ChunkManager
+            {
+                Generator = _worldGenerator,
+                SaveManager = _saveManager,
+                LoadRadius = 4
+            };
+
+            // Spawn player above the surface at world center
+            int spawnX = 0;
+            int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
+            _player.SpawnAt(spawnX, surfaceY);
+        }
 
         // Subscribe to chunk events for debugging
         _chunkManager.OnChunkLoaded += chunk =>
-            System.Diagnostics.Debug.WriteLine($"Generated: {chunk}");
-
-        // Create player
-        _player = new Player();
+            System.Diagnostics.Debug.WriteLine($"Loaded: {chunk}");
 
         // Create systems
         _mining = new MiningSystem();
         _building = new BuildingSystem();
 
-        // Spawn player above the surface at world center
-        int spawnX = 0;
-        int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
-        _player.SpawnAt(spawnX, surfaceY);
-
         System.Diagnostics.Debug.WriteLine($"World Seed: {_worldSeed}");
-        System.Diagnostics.Debug.WriteLine($"Spawn surface Y: {surfaceY}");
-        System.Diagnostics.Debug.WriteLine($"Player spawn: {_player.Position}");
+        System.Diagnostics.Debug.WriteLine($"Player position: {_player.Position}");
 
         base.Initialize();
     }
@@ -102,7 +133,6 @@ public class TerrascentGame : Game
         _camera = new Camera(GraphicsDevice.Viewport);
         _camera.CenterOn(_player.Center);
 
-        // Create a 1x1 white texture for primitive rendering
         _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
         _pixelTexture.SetData([Color.White]);
     }
@@ -116,32 +146,51 @@ public class TerrascentGame : Game
         if (_input.IsKeyPressed(Keys.Escape))
             Exit();
 
-        // Regenerate world with new seed
+        // Save game (F6)
+        if (_input.IsKeyPressed(Keys.F6))
+        {
+            _saveManager.SaveAll(_worldSeed, _player, _chunkManager);
+        }
+
+        // Regenerate world with new seed (F5) - also deletes save
         if (_input.IsKeyPressed(Keys.F5))
         {
             RegenerateWorld();
         }
 
-        // Hotbar selection is now handled in Player.HandleInput()
-
-        // FixedUpdate returns how many physics ticks ran this frame
         int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
         VariableUpdate(deltaTime);
 
-        // Only consume keyboard buffer if physics actually ran
-        // Mouse is always consumed since VariableUpdate always runs
         _input.ConsumeBufferedPresses(consumeKeyboard: physicsUpdates > 0);
 
         base.Update(gameTime);
     }
 
+    protected override void OnExiting(object sender, ExitingEventArgs args)
+    {
+        // Auto-save on exit
+        _saveManager.SaveAll(_worldSeed, _player, _chunkManager);
+        base.OnExiting(sender, args);
+    }
+
     private void RegenerateWorld()
     {
+        // Delete existing save
+        _saveManager.DeleteSave();
+
         _worldSeed = Random.Shared.Next();
 
         _worldGenerator = new WorldGenerator(_worldSeed);
         _chunkManager.Clear();
         _chunkManager.Generator = _worldGenerator;
+
+        // Reset player inventory
+        _player.Inventory.Clear();
+        _player.Inventory.AddItem(ItemType.Dirt, 50);
+        _player.Inventory.AddItem(ItemType.Stone, 50);
+        _player.Inventory.AddItem(ItemType.Wood, 30);
+        _player.Inventory.AddItem(ItemType.Torch, 20);
+        _player.Inventory.AddItem(ItemType.WoodPickaxe, 1);
 
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
@@ -155,16 +204,10 @@ public class TerrascentGame : Game
     {
         float dt = GameLoop.TICK_DURATION;
 
-        // Handle player input
         _player.HandleInput(_input, dt);
-
-        // Update player physics (gravity)
         _player.Update(dt);
-
-        // Apply movement with collision
         _player.ApplyMovement(dt, _chunkManager);
 
-        // Handle mining (hold left click)
         if (_input.IsLeftMouseDown() && _isTargetValid)
         {
             var tile = _chunkManager.GetTileAt(_mouseTilePos);
@@ -190,7 +233,6 @@ public class TerrascentGame : Game
         _camera.Follow(_player.Center);
         _camera.Update(deltaTime);
 
-        // Zoom controls (Ctrl + scroll)
         if (_input.IsKeyDown(Keys.LeftControl) || _input.IsKeyDown(Keys.RightControl))
         {
             if (_input.ScrollWheelDelta != 0)
@@ -201,7 +243,6 @@ public class TerrascentGame : Game
         }
         else
         {
-            // Scroll wheel changes hotbar selection
             if (_input.ScrollWheelDelta != 0)
             {
                 int scrollDir = _input.ScrollWheelDelta > 0 ? -1 : 1;
