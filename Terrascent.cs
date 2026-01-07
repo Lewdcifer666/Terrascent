@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Terrascent.Core;
 using Terrascent.Entities;
+using Terrascent.Items;
 using Terrascent.Systems;
 using Terrascent.World;
 using Terrascent.World.Generation;
@@ -121,12 +122,7 @@ public class TerrascentGame : Game
             RegenerateWorld();
         }
 
-        // Cycle selected block with number keys
-        if (_input.IsKeyPressed(Keys.D1)) _building.SelectedTile = TileType.Dirt;
-        if (_input.IsKeyPressed(Keys.D2)) _building.SelectedTile = TileType.Stone;
-        if (_input.IsKeyPressed(Keys.D3)) _building.SelectedTile = TileType.Wood;
-        if (_input.IsKeyPressed(Keys.D4)) _building.SelectedTile = TileType.Sand;
-        if (_input.IsKeyPressed(Keys.D5)) _building.SelectedTile = TileType.Torch;
+        // Hotbar selection is now handled in Player.HandleInput()
 
         // FixedUpdate returns how many physics ticks ran this frame
         int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
@@ -189,36 +185,114 @@ public class TerrascentGame : Game
 
     private void VariableUpdate(float deltaTime)
     {
-        // Update chunk loading around player
         _chunkManager.UpdateLoadedChunks(_player.Position);
 
-        // Camera follows player
         _camera.Follow(_player.Center);
         _camera.Update(deltaTime);
 
-        // Zoom controls
-        if (_input.ScrollWheelDelta != 0)
+        // Zoom controls (Ctrl + scroll)
+        if (_input.IsKeyDown(Keys.LeftControl) || _input.IsKeyDown(Keys.RightControl))
         {
-            float zoomDelta = _input.ScrollWheelDelta > 0 ? 0.1f : -0.1f;
-            _camera.AdjustZoom(zoomDelta);
+            if (_input.ScrollWheelDelta != 0)
+            {
+                float zoomDelta = _input.ScrollWheelDelta > 0 ? 0.1f : -0.1f;
+                _camera.AdjustZoom(zoomDelta);
+            }
+        }
+        else
+        {
+            // Scroll wheel changes hotbar selection
+            if (_input.ScrollWheelDelta != 0)
+            {
+                int scrollDir = _input.ScrollWheelDelta > 0 ? -1 : 1;
+                _player.Inventory.ScrollSelection(scrollDir);
+            }
         }
 
         if (_input.IsKeyPressed(Keys.R))
             _camera.SetZoom(1f);
 
-        // Update mouse tile position
         var worldPos = _camera.ScreenToWorld(_input.MousePositionV);
         _mouseTilePos = WorldCoordinates.WorldToTile(worldPos);
         _isTargetValid = _mining.IsInRange(_player, _mouseTilePos);
 
-        // Right-click to build
         if (_input.IsRightMousePressed())
         {
             if (_building.TryPlace(_mouseTilePos, _chunkManager, _player))
             {
-                System.Diagnostics.Debug.WriteLine($"Placed {_building.SelectedTile} at {_mouseTilePos}");
+                System.Diagnostics.Debug.WriteLine($"Placed block at {_mouseTilePos}");
             }
         }
+    }
+
+    // Add new Draw method for hotbar:
+    private void DrawHotbar()
+    {
+        int slotSize = 40;
+        int padding = 4;
+        int hotbarWidth = _player.Inventory.HotbarSize * (slotSize + padding) + padding;
+        int hotbarX = (_graphics.PreferredBackBufferWidth - hotbarWidth) / 2;
+        int hotbarY = _graphics.PreferredBackBufferHeight - slotSize - padding * 2 - 10;
+
+        // Background
+        DrawRectangle(new Vector2(hotbarX, hotbarY), hotbarWidth, slotSize + padding * 2, new Color(0, 0, 0, 180));
+
+        for (int i = 0; i < _player.Inventory.HotbarSize; i++)
+        {
+            int x = hotbarX + padding + i * (slotSize + padding);
+            int y = hotbarY + padding;
+
+            // Slot background
+            Color slotColor = i == _player.Inventory.SelectedSlot
+                ? new Color(100, 100, 150, 200)
+                : new Color(60, 60, 60, 200);
+            DrawRectangle(new Vector2(x, y), slotSize, slotSize, slotColor);
+
+            // Selection highlight
+            if (i == _player.Inventory.SelectedSlot)
+            {
+                DrawRectangle(new Vector2(x - 2, y - 2), slotSize + 4, 2, Color.Yellow);
+                DrawRectangle(new Vector2(x - 2, y + slotSize), slotSize + 4, 2, Color.Yellow);
+                DrawRectangle(new Vector2(x - 2, y), 2, slotSize, Color.Yellow);
+                DrawRectangle(new Vector2(x + slotSize, y), 2, slotSize, Color.Yellow);
+            }
+
+            // Item in slot
+            var stack = _player.Inventory.GetSlot(i);
+            if (!stack.IsEmpty)
+            {
+                // Draw item color (placeholder for sprite)
+                Color itemColor = GetItemColor(stack.Type);
+                int itemSize = slotSize - 8;
+                DrawRectangle(new Vector2(x + 4, y + 4), itemSize, itemSize, itemColor);
+
+                // Draw stack count (bottom right) - visual indicator with size
+                if (stack.Count > 1)
+                {
+                    int countWidth = stack.Count >= 100 ? 20 : (stack.Count >= 10 ? 14 : 8);
+                    DrawRectangle(new Vector2(x + slotSize - countWidth - 2, y + slotSize - 10), countWidth, 8, new Color(0, 0, 0, 200));
+                }
+            }
+        }
+    }
+
+    private static Color GetItemColor(ItemType type)
+    {
+        return type switch
+        {
+            ItemType.Dirt => new Color(139, 90, 43),
+            ItemType.Stone => new Color(128, 128, 128),
+            ItemType.Sand => new Color(238, 214, 175),
+            ItemType.Wood => new Color(160, 82, 45),
+            ItemType.Torch => Color.Yellow,
+            ItemType.CopperOre => new Color(184, 115, 51),
+            ItemType.IronOre => new Color(165, 142, 142),
+            ItemType.SilverOre => new Color(192, 192, 210),
+            ItemType.GoldOre => new Color(255, 215, 0),
+            ItemType.WoodPickaxe => new Color(139, 90, 43),
+            ItemType.CopperPickaxe => new Color(184, 115, 51),
+            _ => Color.Magenta
+        };
     }
 
     protected override void Draw(GameTime gameTime)
@@ -251,8 +325,8 @@ public class TerrascentGame : Game
 
         // Draw UI (no camera transform)
         _spriteBatch.Begin();
+        DrawHotbar();
         DrawDebugInfo();
-        DrawSelectedTile();
         _spriteBatch.End();
 
         base.Draw(gameTime);
@@ -306,21 +380,6 @@ public class TerrascentGame : Game
         // Center the crack overlay
         Vector2 crackPos = tileWorldPos + new Vector2((TILE_SIZE - crackedSize) / 2f);
         DrawRectangle(crackPos, crackedSize, crackedSize, crackColor);
-    }
-
-    private void DrawSelectedTile()
-    {
-        // Draw selected tile indicator in corner
-        string text = $"Selected: {_building.SelectedTile} (1-5 to change)";
-
-        // Draw background
-        DrawRectangle(new Vector2(10, 10), 250, 25, new Color(0, 0, 0, 150));
-
-        // Draw colored square showing selected tile
-        Color tileColor = GetTileColor(_building.SelectedTile);
-        DrawRectangle(new Vector2(15, 15), 15, 15, tileColor);
-
-        // TODO: Draw text when font is available
     }
 
     private void DrawChunkBorders()
