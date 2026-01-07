@@ -78,6 +78,25 @@ public class InputManager
     }
 
     /// <summary>
+    /// Consume a specific key press immediately (removes from buffer).
+    /// Call this right after handling a key press that shouldn't repeat.
+    /// Returns true if the key was in the buffer.
+    /// </summary>
+    public bool ConsumeKeyPress(Keys key)
+    {
+        return _bufferedKeyPresses.Remove(key);
+    }
+
+    /// <summary>
+    /// Consume mouse button presses immediately.
+    /// </summary>
+    public void ConsumeMousePress(bool left = false, bool right = false)
+    {
+        if (left) _leftMousePressBuffered = false;
+        if (right) _rightMousePressBuffered = false;
+    }
+
+    /// <summary>
     /// Call this at the end of Update to clear consumed presses.
     /// </summary>
     /// <param name="consumeKeyboard">Only consume keyboard if FixedUpdate actually ran</param>

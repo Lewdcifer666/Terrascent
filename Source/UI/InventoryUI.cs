@@ -1,13 +1,16 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Terrascent.Combat;
 using Terrascent.Core;
 using Terrascent.Items;
+using Terrascent.Items.Effects;
 
 namespace Terrascent.UI;
 
 /// <summary>
 /// Terraria-style inventory UI with drag and drop functionality.
+/// Features beautiful tooltips with item stats and rarity-colored borders.
 /// </summary>
 public class InventoryUI
 {
@@ -30,8 +33,8 @@ public class InventoryUI
     private int _screenWidth;
     private int _screenHeight;
 
-    // Tooltip
-    private string _tooltipText = "";
+    // Tooltip data
+    private ItemStack _tooltipItem;
     private bool _showTooltip;
 
     public InventoryUI(Inventory inventory, UIManager uiManager, int screenWidth, int screenHeight)
@@ -100,6 +103,7 @@ public class InventoryUI
         // Find hovered slot
         _hoveredSlot = -1;
         _showTooltip = false;
+        _tooltipItem = ItemStack.Empty;
 
         for (int i = 0; i < _slotBounds.Length; i++)
         {
@@ -111,20 +115,19 @@ public class InventoryUI
                 var stack = _inventory.GetSlot(i);
                 if (!stack.IsEmpty)
                 {
-                    _tooltipText = $"{stack.Properties.Name}";
-                    if (stack.Count > 1)
-                        _tooltipText += $" ({stack.Count})";
+                    _tooltipItem = stack;
                     _showTooltip = true;
                 }
                 break;
             }
         }
 
-        // Handle left click
+        // Handle left click - consume immediately
         if (input.IsLeftMousePressed())
         {
             if (_hoveredSlot >= 0)
             {
+                input.ConsumeMousePress(left: true);
                 _uiManager.HandleSlotClick(_hoveredSlot, rightClick: false, shiftHeld);
             }
             else if (!_panelBounds.Contains(mousePos))
@@ -132,16 +135,18 @@ public class InventoryUI
                 // Clicked outside inventory - drop held item
                 if (_uiManager.IsHoldingItem)
                 {
+                    input.ConsumeMousePress(left: true);
                     _uiManager.DropHeldItem();
                 }
             }
         }
 
-        // Handle right click
+        // Handle right click - consume immediately
         if (input.IsRightMousePressed())
         {
             if (_hoveredSlot >= 0)
             {
+                input.ConsumeMousePress(right: true);
                 _uiManager.HandleSlotClick(_hoveredSlot, rightClick: true, shiftHeld);
             }
         }
@@ -155,9 +160,7 @@ public class InventoryUI
         // Draw panel background
         DrawPanel(spriteBatch, pixelTexture);
 
-        // Draw title
-        // Note: For now we'll skip text since we don't have a font loaded
-        // We'll draw a simple header bar instead
+        // Draw title bar
         DrawHeader(spriteBatch, pixelTexture);
 
         // Draw hotbar separator line (between row 0 and row 1)
@@ -169,7 +172,7 @@ public class InventoryUI
             DrawSlot(spriteBatch, pixelTexture, i);
         }
 
-        // Draw tooltip
+        // Draw tooltip (last so it's on top)
         if (_showTooltip && !_uiManager.IsHoldingItem)
         {
             DrawTooltip(spriteBatch, pixelTexture, mousePosition);
@@ -181,37 +184,39 @@ public class InventoryUI
     /// </summary>
     private void DrawPanel(SpriteBatch spriteBatch, Texture2D pixelTexture)
     {
-        // Main background
-        spriteBatch.Draw(
-            pixelTexture,
-            _panelBounds,
-            new Color(30, 30, 50, 230)
+        // Main background with slight transparency
+        spriteBatch.Draw(pixelTexture, _panelBounds, new Color(25, 25, 45, 240));
+
+        // Outer border (darker)
+        DrawBorder(spriteBatch, pixelTexture, _panelBounds, new Color(60, 60, 90), 2);
+
+        // Inner highlight (lighter, creates depth)
+        Rectangle innerBounds = new(
+            _panelBounds.X + 2,
+            _panelBounds.Y + 2,
+            _panelBounds.Width - 4,
+            _panelBounds.Height - 4
         );
-
-        // Border
-        int borderWidth = 2;
-        Color borderColor = new Color(80, 80, 120, 255);
-
-        // Top
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(_panelBounds.X, _panelBounds.Y, _panelBounds.Width, borderWidth),
-            borderColor);
-        // Bottom
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(_panelBounds.X, _panelBounds.Bottom - borderWidth, _panelBounds.Width, borderWidth),
-            borderColor);
-        // Left
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(_panelBounds.X, _panelBounds.Y, borderWidth, _panelBounds.Height),
-            borderColor);
-        // Right
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(_panelBounds.Right - borderWidth, _panelBounds.Y, borderWidth, _panelBounds.Height),
-            borderColor);
+        DrawBorder(spriteBatch, pixelTexture, innerBounds, new Color(80, 80, 120, 100), 1);
     }
 
     /// <summary>
-    /// Draw header bar (where title would go).
+    /// Draw a border around a rectangle.
+    /// </summary>
+    private static void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, Color color, int thickness)
+    {
+        // Top
+        spriteBatch.Draw(pixelTexture, new Rectangle(bounds.X, bounds.Y, bounds.Width, thickness), color);
+        // Bottom
+        spriteBatch.Draw(pixelTexture, new Rectangle(bounds.X, bounds.Bottom - thickness, bounds.Width, thickness), color);
+        // Left
+        spriteBatch.Draw(pixelTexture, new Rectangle(bounds.X, bounds.Y, thickness, bounds.Height), color);
+        // Right
+        spriteBatch.Draw(pixelTexture, new Rectangle(bounds.Right - thickness, bounds.Y, thickness, bounds.Height), color);
+    }
+
+    /// <summary>
+    /// Draw header bar.
     /// </summary>
     private void DrawHeader(SpriteBatch spriteBatch, Texture2D pixelTexture)
     {
@@ -222,7 +227,16 @@ public class InventoryUI
             20
         );
 
-        spriteBatch.Draw(pixelTexture, headerBounds, new Color(50, 50, 80, 200));
+        // Header background with gradient effect
+        spriteBatch.Draw(pixelTexture, headerBounds, new Color(45, 45, 75, 220));
+
+        // Header highlight on top edge
+        spriteBatch.Draw(pixelTexture,
+            new Rectangle(headerBounds.X, headerBounds.Y, headerBounds.Width, 1),
+            new Color(100, 100, 150, 150));
+
+        // Draw "INVENTORY" title
+        DrawText(spriteBatch, pixelTexture, "INVENTORY", headerBounds.X + 4, headerBounds.Y + 6, new Color(200, 200, 220));
     }
 
     /// <summary>
@@ -230,20 +244,22 @@ public class InventoryUI
     /// </summary>
     private void DrawHotbarSeparator(SpriteBatch spriteBatch, Texture2D pixelTexture)
     {
-        // Draw a line below the first row (hotbar)
         if (_slotBounds.Length > COLUMNS)
         {
             int y = _slotBounds[COLUMNS].Y - SLOT_PADDING / 2 - 1;
-            spriteBatch.Draw(
-                pixelTexture,
-                new Rectangle(_panelBounds.X + PANEL_PADDING, y, _panelBounds.Width - PANEL_PADDING * 2, 2),
-                new Color(100, 100, 140, 180)
-            );
+
+            // Gradient separator line
+            spriteBatch.Draw(pixelTexture,
+                new Rectangle(_panelBounds.X + PANEL_PADDING + 10, y, _panelBounds.Width - PANEL_PADDING * 2 - 20, 1),
+                new Color(100, 100, 140, 150));
+            spriteBatch.Draw(pixelTexture,
+                new Rectangle(_panelBounds.X + PANEL_PADDING + 10, y + 1, _panelBounds.Width - PANEL_PADDING * 2 - 20, 1),
+                new Color(40, 40, 60, 100));
         }
     }
 
     /// <summary>
-    /// Draw a single inventory slot.
+    /// Draw a single inventory slot with item and stack count.
     /// </summary>
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D pixelTexture, int slotIndex)
     {
@@ -257,40 +273,47 @@ public class InventoryUI
         // Slot background
         Color slotBgColor;
         if (isSelected)
-            slotBgColor = new Color(80, 80, 130, 220);
+            slotBgColor = new Color(70, 70, 120, 230);
         else if (isHotbar)
-            slotBgColor = new Color(50, 50, 70, 200);
+            slotBgColor = new Color(45, 45, 65, 220);
         else
-            slotBgColor = new Color(40, 40, 55, 200);
+            slotBgColor = new Color(35, 35, 50, 220);
 
         spriteBatch.Draw(pixelTexture, bounds, slotBgColor);
 
         // Hover highlight
         if (isHovered)
         {
-            spriteBatch.Draw(pixelTexture, bounds, new Color(255, 255, 255, 40));
+            spriteBatch.Draw(pixelTexture, bounds, new Color(255, 255, 255, 35));
         }
 
-        // Slot border
-        Color borderColor = isSelected ? Color.Yellow : (isHotbar ? new Color(100, 100, 140) : new Color(70, 70, 90));
-        int borderWidth = isSelected ? 2 : 1;
+        // Slot border - rarity colored if has item, otherwise default
+        Color borderColor;
+        int borderWidth;
 
-        // Top
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(bounds.X, bounds.Y, bounds.Width, borderWidth),
-            borderColor);
-        // Bottom
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(bounds.X, bounds.Bottom - borderWidth, bounds.Width, borderWidth),
-            borderColor);
-        // Left
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(bounds.X, bounds.Y, borderWidth, bounds.Height),
-            borderColor);
-        // Right
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(bounds.Right - borderWidth, bounds.Y, borderWidth, bounds.Height),
-            borderColor);
+        if (isSelected)
+        {
+            borderColor = Color.Gold;
+            borderWidth = 2;
+        }
+        else if (!stack.IsEmpty)
+        {
+            // Use rarity color for border when item is present
+            borderColor = GetRarityColor(stack.Properties.Rarity) * 0.7f;
+            borderWidth = 1;
+        }
+        else if (isHotbar)
+        {
+            borderColor = new Color(80, 80, 110);
+            borderWidth = 1;
+        }
+        else
+        {
+            borderColor = new Color(55, 55, 75);
+            borderWidth = 1;
+        }
+
+        DrawBorder(spriteBatch, pixelTexture, bounds, borderColor, borderWidth);
 
         // Draw item if slot has one
         if (!stack.IsEmpty)
@@ -306,7 +329,7 @@ public class InventoryUI
     }
 
     /// <summary>
-    /// Draw an item in a slot.
+    /// Draw an item in a slot with rarity glow and stack count.
     /// </summary>
     private void DrawItem(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle slotBounds, ItemStack stack)
     {
@@ -319,176 +342,370 @@ public class InventoryUI
         );
 
         Color itemColor = GetItemColor(stack.Type);
-        spriteBatch.Draw(pixelTexture, itemBounds, itemColor);
-
-        // Draw rarity glow
         Color rarityColor = GetRarityColor(stack.Properties.Rarity);
+
+        // Draw rarity glow behind item (subtle)
         if (rarityColor != Color.White)
         {
-            // Draw subtle glow border
-            int glowWidth = 2;
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(itemBounds.X - glowWidth, itemBounds.Y - glowWidth, itemBounds.Width + glowWidth * 2, glowWidth),
-                rarityColor * 0.5f);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(itemBounds.X - glowWidth, itemBounds.Bottom, itemBounds.Width + glowWidth * 2, glowWidth),
-                rarityColor * 0.5f);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(itemBounds.X - glowWidth, itemBounds.Y, glowWidth, itemBounds.Height),
-                rarityColor * 0.5f);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(itemBounds.Right, itemBounds.Y, glowWidth, itemBounds.Height),
-                rarityColor * 0.5f);
+            Rectangle glowBounds = new(
+                itemBounds.X - 2,
+                itemBounds.Y - 2,
+                itemBounds.Width + 4,
+                itemBounds.Height + 4
+            );
+            spriteBatch.Draw(pixelTexture, glowBounds, rarityColor * 0.25f);
         }
 
-        // Draw stack count (bottom right of slot)
+        // Draw item
+        spriteBatch.Draw(pixelTexture, itemBounds, itemColor);
+
+        // Draw stack count in bottom-right corner
         if (stack.Count > 1)
         {
-            int digitCount = stack.Count >= 100 ? 3 : (stack.Count >= 10 ? 2 : 1);
-            int countWidth = digitCount * 6 + 4;
-            int countHeight = 10;
-
-            Rectangle countBg = new(
-                slotBounds.Right - countWidth - 2,
-                slotBounds.Bottom - countHeight - 2,
-                countWidth,
-                countHeight
-            );
-
-            spriteBatch.Draw(pixelTexture, countBg, new Color(0, 0, 0, 180));
-
-            // Draw simple number representation (colored bars for now)
-            // In a real implementation, you'd draw text here
-            DrawStackCount(spriteBatch, pixelTexture, countBg, stack.Count);
+            DrawStackNumber(spriteBatch, pixelTexture, slotBounds, stack.Count);
         }
     }
 
     /// <summary>
-    /// Draw stack count as visual indicator (until we have fonts).
+    /// Draw stack count number using simple digit representation.
     /// </summary>
-    private void DrawStackCount(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, int count)
+    private static void DrawStackNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle slotBounds, int count)
     {
-        // Draw a simple visual representation
-        // Hundreds = tall bar, tens = medium bar, ones = short bar
-        int ones = count % 10;
-        int tens = (count / 10) % 10;
-        int hundreds = count / 100;
-
-        int x = bounds.X + 2;
-        int y = bounds.Bottom - 2;
-        int barWidth = 4;
+        string countStr = count.ToString();
+        int digitWidth = 5;
+        int digitHeight = 7;
         int spacing = 1;
+        int totalWidth = countStr.Length * (digitWidth + spacing) - spacing;
 
-        // Draw bars from right to left
-        if (ones > 0 || tens > 0 || hundreds > 0)
+        int x = slotBounds.Right - totalWidth - 3;
+        int y = slotBounds.Bottom - digitHeight - 3;
+
+        // Background for readability
+        Rectangle bgBounds = new(x - 2, y - 1, totalWidth + 4, digitHeight + 2);
+        spriteBatch.Draw(pixelTexture, bgBounds, new Color(0, 0, 0, 200));
+
+        // Draw each digit
+        foreach (char c in countStr)
         {
-            // Ones place
-            int onesHeight = Math.Max(2, ones * bounds.Height / 12);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(bounds.Right - barWidth - 1, y - onesHeight, barWidth - 1, onesHeight),
-                Color.White * 0.9f);
+            DrawDigit(spriteBatch, pixelTexture, x, y, c - '0', Color.White);
+            x += digitWidth + spacing;
         }
+    }
 
-        if (tens > 0 || hundreds > 0)
+    /// <summary>
+    /// Draw a single digit using pixel art style.
+    /// </summary>
+    private static void DrawDigit(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, int digit, Color color)
+    {
+        // Simple 5x7 pixel font patterns for digits 0-9
+        bool[,] patterns = digit switch
         {
-            // Tens place
-            int tensHeight = Math.Max(2, tens * bounds.Height / 12);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(bounds.Right - barWidth * 2 - spacing - 1, y - tensHeight, barWidth - 1, tensHeight),
-                Color.LightGray * 0.9f);
-        }
+            0 => new bool[,] { { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true } },
+            1 => new bool[,] { { false, false, true, false, false }, { false, true, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, true, true, true, false } },
+            2 => new bool[,] { { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true } },
+            3 => new bool[,] { { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, true } },
+            4 => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, false, true } },
+            5 => new bool[,] { { true, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, true } },
+            6 => new bool[,] { { true, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true } },
+            7 => new bool[,] { { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, true, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false } },
+            8 => new bool[,] { { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true } },
+            9 => new bool[,] { { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, true } },
+            _ => new bool[7, 5]
+        };
 
-        if (hundreds > 0)
+        for (int row = 0; row < 7; row++)
         {
-            // Hundreds place
-            int hundredsHeight = Math.Max(2, hundreds * bounds.Height / 12);
-            spriteBatch.Draw(pixelTexture,
-                new Rectangle(bounds.Right - barWidth * 3 - spacing * 2 - 1, y - hundredsHeight, barWidth - 1, hundredsHeight),
-                Color.Gold * 0.9f);
+            for (int col = 0; col < 5; col++)
+            {
+                if (patterns[row, col])
+                {
+                    spriteBatch.Draw(pixelTexture, new Rectangle(x + col, y + row, 1, 1), color);
+                }
+            }
         }
     }
 
     /// <summary>
     /// Draw slot number indicator for hotbar.
     /// </summary>
-    private void DrawSlotNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, int slotIndex)
+    private static void DrawSlotNumber(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle bounds, int slotIndex)
     {
-        // Draw a small indicator in top-left corner
         int number = (slotIndex + 1) % 10; // 1-9, then 0
 
-        int indicatorSize = 10;
-        Rectangle indicatorBounds = new(
-            bounds.X + 2,
-            bounds.Y + 2,
-            indicatorSize,
-            indicatorSize
-        );
+        int x = bounds.X + 2;
+        int y = bounds.Y + 2;
 
-        // Background
-        spriteBatch.Draw(pixelTexture, indicatorBounds, new Color(0, 0, 0, 150));
+        // Small background
+        spriteBatch.Draw(pixelTexture, new Rectangle(x, y, 7, 9), new Color(0, 0, 0, 150));
 
-        // Simple visual for number (small bar representing 1-9, 0)
-        int barHeight = number == 0 ? 8 : Math.Min(8, number + 1);
-        spriteBatch.Draw(pixelTexture,
-            new Rectangle(indicatorBounds.X + 2, indicatorBounds.Bottom - barHeight - 1, indicatorSize - 4, barHeight),
-            new Color(150, 150, 180, 200));
+        // Draw the number
+        DrawDigit(spriteBatch, pixelTexture, x + 1, y + 1, number, new Color(180, 180, 200));
     }
 
     /// <summary>
-    /// Draw tooltip near mouse cursor.
+    /// Draw beautiful tooltip with item information and stats.
     /// </summary>
     private void DrawTooltip(SpriteBatch spriteBatch, Texture2D pixelTexture, Vector2 mousePosition)
     {
-        // Simple tooltip background
-        // In real implementation, we'd measure text and draw it
-        int tooltipWidth = 120;
-        int tooltipHeight = 24;
-        int offsetX = 15;
-        int offsetY = 15;
+        if (_tooltipItem.IsEmpty)
+            return;
+
+        var props = _tooltipItem.Properties;
+        Color rarityColor = GetRarityColor(props.Rarity);
+
+        // Build tooltip content
+        List<(string text, Color color)> lines = new();
+
+        // Item name (rarity colored)
+        lines.Add((props.Name, rarityColor));
+
+        // Stack count if > 1
+        if (_tooltipItem.Count > 1)
+        {
+            lines.Add(($"Stack: {_tooltipItem.Count}/{props.MaxStack}", new Color(180, 180, 180)));
+        }
+
+        // Category
+        lines.Add(($"[{props.Category}]", new Color(150, 150, 150)));
+
+        // Weapon stats
+        if (WeaponRegistry.IsWeapon(_tooltipItem.Type))
+        {
+            var weaponData = WeaponRegistry.Get(_tooltipItem.Type);
+            lines.Add(("", Color.Transparent)); // Spacer
+            lines.Add(($"Damage: {weaponData.BaseDamage}", new Color(255, 100, 100)));
+            lines.Add(($"Type: {weaponData.WeaponType}", new Color(200, 200, 200)));
+            lines.Add(($"Range: {weaponData.BaseRange:F0}px", new Color(200, 200, 200)));
+            lines.Add(($"Speed: {weaponData.AttackSpeed:F1}/s", new Color(200, 200, 200)));
+
+            if (!string.IsNullOrEmpty(weaponData.Description))
+            {
+                lines.Add(("", Color.Transparent)); // Spacer
+                lines.Add((weaponData.Description, new Color(150, 150, 180)));
+            }
+        }
+
+        // Tool power
+        if (props.ToolPower > 0)
+        {
+            lines.Add(("", Color.Transparent)); // Spacer
+            lines.Add(($"Power: {props.ToolPower}%", new Color(100, 200, 255)));
+        }
+
+        // Stackable item effects
+        var stackableItem = StackableItemRegistry.Get(_tooltipItem.Type);
+        if (stackableItem != null)
+        {
+            lines.Add(("", Color.Transparent)); // Spacer
+
+            foreach (var effect in stackableItem.Effects)
+            {
+                string effectDesc = effect.GetDescription(_tooltipItem.Count);
+                Color effectColor = effect.Type switch
+                {
+                    EffectType.Damage or EffectType.DamageMult or EffectType.CritChance or EffectType.CritDamageMult
+                        => new Color(255, 150, 150),
+                    EffectType.MaxHealth or EffectType.HealthRegen or EffectType.OnKillHeal or EffectType.OnHitHeal or EffectType.LifeSteal
+                        => new Color(150, 255, 150),
+                    EffectType.Armor or EffectType.BlockChance or EffectType.DodgeChance
+                        => new Color(150, 150, 255),
+                    EffectType.MoveSpeedMult or EffectType.AttackSpeedMult
+                        => new Color(255, 255, 150),
+                    EffectType.ExtraJump
+                        => new Color(150, 255, 255),
+                    _ => new Color(200, 200, 200)
+                };
+                lines.Add((effectDesc, effectColor));
+            }
+
+            if (!string.IsNullOrEmpty(stackableItem.Lore))
+            {
+                lines.Add(("", Color.Transparent)); // Spacer
+                lines.Add(($"\"{stackableItem.Lore}\"", new Color(120, 120, 140)));
+            }
+        }
+
+        // Sell value
+        if (props.SellValue > 0)
+        {
+            lines.Add(("", Color.Transparent)); // Spacer
+            lines.Add(($"Sell: {props.SellValue} copper", new Color(200, 180, 100)));
+        }
+
+        // Calculate tooltip size
+        int lineHeight = 10;
+        int tooltipWidth = 180;
+        int tooltipHeight = PANEL_PADDING * 2 + lines.Count * lineHeight;
+
+        // Adjust width based on longest line (estimate)
+        foreach (var (text, _) in lines)
+        {
+            int estimatedWidth = text.Length * 6 + PANEL_PADDING * 2;
+            if (estimatedWidth > tooltipWidth)
+                tooltipWidth = Math.Min(estimatedWidth, 300);
+        }
+
+        int offsetX = 18;
+        int offsetY = 18;
 
         int x = (int)mousePosition.X + offsetX;
         int y = (int)mousePosition.Y + offsetY;
 
         // Keep tooltip on screen
-        if (x + tooltipWidth > _screenWidth)
+        if (x + tooltipWidth > _screenWidth - 10)
             x = (int)mousePosition.X - tooltipWidth - 5;
-        if (y + tooltipHeight > _screenHeight)
+        if (y + tooltipHeight > _screenHeight - 10)
             y = (int)mousePosition.Y - tooltipHeight - 5;
+        if (x < 10)
+            x = 10;
+        if (y < 10)
+            y = 10;
 
         Rectangle tooltipBounds = new(x, y, tooltipWidth, tooltipHeight);
 
-        // Background
-        spriteBatch.Draw(pixelTexture, tooltipBounds, new Color(20, 20, 30, 240));
+        // Background with slight transparency
+        spriteBatch.Draw(pixelTexture, tooltipBounds, new Color(15, 15, 25, 245));
 
-        // Border
-        Color borderColor = new Color(100, 100, 140);
-        spriteBatch.Draw(pixelTexture, new Rectangle(x, y, tooltipWidth, 1), borderColor);
-        spriteBatch.Draw(pixelTexture, new Rectangle(x, y + tooltipHeight - 1, tooltipWidth, 1), borderColor);
-        spriteBatch.Draw(pixelTexture, new Rectangle(x, y, 1, tooltipHeight), borderColor);
-        spriteBatch.Draw(pixelTexture, new Rectangle(x + tooltipWidth - 1, y, 1, tooltipHeight), borderColor);
+        // Rarity-colored border
+        DrawBorder(spriteBatch, pixelTexture, tooltipBounds, rarityColor * 0.8f, 2);
 
-        // For now, draw a colored bar representing the item
-        if (_hoveredSlot >= 0)
+        // Inner highlight
+        Rectangle innerBounds = new(x + 2, y + 2, tooltipWidth - 4, tooltipHeight - 4);
+        DrawBorder(spriteBatch, pixelTexture, innerBounds, rarityColor * 0.3f, 1);
+
+        // Draw each line
+        int textY = y + PANEL_PADDING;
+        foreach (var (text, color) in lines)
         {
-            var stack = _inventory.GetSlot(_hoveredSlot);
-            if (!stack.IsEmpty)
+            if (color != Color.Transparent && !string.IsNullOrEmpty(text))
             {
-                Color itemColor = GetItemColor(stack.Type);
-                spriteBatch.Draw(pixelTexture,
-                    new Rectangle(x + 4, y + 4, 16, 16),
-                    itemColor);
+                DrawText(spriteBatch, pixelTexture, text, x + PANEL_PADDING, textY, color);
+            }
+            textY += lineHeight;
+        }
+    }
 
-                // Rarity-colored line
-                Color rarityColor = GetRarityColor(stack.Properties.Rarity);
-                spriteBatch.Draw(pixelTexture,
-                    new Rectangle(x + 24, y + 10, tooltipWidth - 32, 4),
-                    rarityColor);
+    /// <summary>
+    /// Draw text using simple pixel font.
+    /// </summary>
+    private static void DrawText(SpriteBatch spriteBatch, Texture2D pixelTexture, string text, int x, int y, Color color)
+    {
+        int charWidth = 5;
+        int spacing = 1;
+
+        foreach (char c in text)
+        {
+            if (c >= '0' && c <= '9')
+            {
+                DrawDigit(spriteBatch, pixelTexture, x, y, c - '0', color);
+            }
+            else if (c >= 'A' && c <= 'Z')
+            {
+                DrawLetter(spriteBatch, pixelTexture, x, y, c, color);
+            }
+            else if (c >= 'a' && c <= 'z')
+            {
+                DrawLetter(spriteBatch, pixelTexture, x, y, (char)(c - 32), color); // Convert to uppercase
+            }
+            else if (c == ' ')
+            {
+                // Space - just advance
+            }
+            else
+            {
+                DrawSymbol(spriteBatch, pixelTexture, x, y, c, color);
+            }
+
+            x += charWidth + spacing;
+        }
+    }
+
+    /// <summary>
+    /// Draw a letter using pixel patterns.
+    /// </summary>
+    private static void DrawLetter(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char letter, Color color)
+    {
+        // Simplified 5x7 letter patterns for A-Z
+        bool[,] pattern = letter switch
+        {
+            'A' => new bool[,] { { false, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true } },
+            'B' => new bool[,] { { true, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, false } },
+            'C' => new bool[,] { { false, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { false, true, true, true, true } },
+            'D' => new bool[,] { { true, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, false } },
+            'E' => new bool[,] { { true, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true } },
+            'F' => new bool[,] { { true, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false } },
+            'G' => new bool[,] { { false, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { false, true, true, true, true } },
+            'H' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true } },
+            'I' => new bool[,] { { false, true, true, true, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, true, true, true, false } },
+            'J' => new bool[,] { { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { false, true, true, true, false } },
+            'K' => new bool[,] { { true, false, false, false, true }, { true, false, false, true, false }, { true, false, true, false, false }, { true, true, false, false, false }, { true, false, true, false, false }, { true, false, false, true, false }, { true, false, false, false, true } },
+            'L' => new bool[,] { { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true } },
+            'M' => new bool[,] { { true, false, false, false, true }, { true, true, false, true, true }, { true, false, true, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true } },
+            'N' => new bool[,] { { true, false, false, false, true }, { true, true, false, false, true }, { true, false, true, false, true }, { true, false, false, true, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true } },
+            'O' => new bool[,] { { false, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { false, true, true, true, false } },
+            'P' => new bool[,] { { true, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false } },
+            'Q' => new bool[,] { { false, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, true, false, true }, { true, false, false, true, false }, { false, true, true, false, true } },
+            'R' => new bool[,] { { true, true, true, true, false }, { true, false, false, false, true }, { true, false, false, false, true }, { true, true, true, true, false }, { true, false, true, false, false }, { true, false, false, true, false }, { true, false, false, false, true } },
+            'S' => new bool[,] { { false, true, true, true, true }, { true, false, false, false, false }, { true, false, false, false, false }, { false, true, true, true, false }, { false, false, false, false, true }, { false, false, false, false, true }, { true, true, true, true, false } },
+            'T' => new bool[,] { { true, true, true, true, true }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false } },
+            'U' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { false, true, true, true, false } },
+            'V' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { false, true, false, true, false }, { false, false, true, false, false } },
+            'W' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { true, false, false, false, true }, { true, false, true, false, true }, { true, false, true, false, true }, { true, true, false, true, true }, { true, false, false, false, true } },
+            'X' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { false, true, false, true, false }, { false, false, true, false, false }, { false, true, false, true, false }, { true, false, false, false, true }, { true, false, false, false, true } },
+            'Y' => new bool[,] { { true, false, false, false, true }, { true, false, false, false, true }, { false, true, false, true, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false } },
+            'Z' => new bool[,] { { true, true, true, true, true }, { false, false, false, false, true }, { false, false, false, true, false }, { false, false, true, false, false }, { false, true, false, false, false }, { true, false, false, false, false }, { true, true, true, true, true } },
+            _ => new bool[7, 5]
+        };
+
+        for (int row = 0; row < 7; row++)
+        {
+            for (int col = 0; col < 5; col++)
+            {
+                if (pattern[row, col])
+                {
+                    spriteBatch.Draw(pixelTexture, new Rectangle(x + col, y + row, 1, 1), color);
+                }
             }
         }
     }
 
     /// <summary>
-    /// Get color for item type (matches hotbar colors).
+    /// Draw common symbols.
+    /// </summary>
+    private static void DrawSymbol(SpriteBatch spriteBatch, Texture2D pixelTexture, int x, int y, char symbol, Color color)
+    {
+        bool[,] pattern = symbol switch
+        {
+            ':' => new bool[,] { { false, false, false, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, false, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, false, false, false } },
+            '.' => new bool[,] { { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, true, false, false }, { false, false, true, false, false } },
+            ',' => new bool[,] { { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, true, false, false, false } },
+            '/' => new bool[,] { { false, false, false, false, true }, { false, false, false, true, false }, { false, false, false, true, false }, { false, false, true, false, false }, { false, true, false, false, false }, { false, true, false, false, false }, { true, false, false, false, false } },
+            '%' => new bool[,] { { true, true, false, false, true }, { true, true, false, true, false }, { false, false, false, true, false }, { false, false, true, false, false }, { false, true, false, false, false }, { false, true, false, true, true }, { true, false, false, true, true } },
+            '+' => new bool[,] { { false, false, false, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { true, true, true, true, true }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, false, false, false } },
+            '-' => new bool[,] { { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { true, true, true, true, true }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false } },
+            '"' => new bool[,] { { false, true, false, true, false }, { false, true, false, true, false }, { false, true, false, true, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false } },
+            '\'' => new bool[,] { { false, false, true, false, false }, { false, false, true, false, false }, { false, false, true, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false }, { false, false, false, false, false } },
+            '[' => new bool[,] { { false, true, true, true, false }, { false, true, false, false, false }, { false, true, false, false, false }, { false, true, false, false, false }, { false, true, false, false, false }, { false, true, false, false, false }, { false, true, true, true, false } },
+            ']' => new bool[,] { { false, true, true, true, false }, { false, false, false, true, false }, { false, false, false, true, false }, { false, false, false, true, false }, { false, false, false, true, false }, { false, false, false, true, false }, { false, true, true, true, false } },
+            '(' => new bool[,] { { false, false, true, false, false }, { false, true, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { true, false, false, false, false }, { false, true, false, false, false }, { false, false, true, false, false } },
+            ')' => new bool[,] { { false, false, true, false, false }, { false, false, false, true, false }, { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, false, true }, { false, false, false, true, false }, { false, false, true, false, false } },
+            _ => new bool[7, 5]
+        };
+
+        for (int row = 0; row < 7; row++)
+        {
+            for (int col = 0; col < 5; col++)
+            {
+                if (pattern[row, col])
+                {
+                    spriteBatch.Draw(pixelTexture, new Rectangle(x + col, y + row, 1, 1), color);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get color for item type.
     /// </summary>
     public static Color GetItemColor(ItemType type)
     {
@@ -583,11 +800,11 @@ public class InventoryUI
         return rarity switch
         {
             ItemRarity.Common => Color.White,
-            ItemRarity.Uncommon => Color.LimeGreen,
-            ItemRarity.Rare => Color.DeepSkyBlue,
-            ItemRarity.Epic => Color.MediumPurple,
-            ItemRarity.Legendary => Color.Orange,
-            ItemRarity.Boss => Color.Red,
+            ItemRarity.Uncommon => new Color(100, 255, 100),  // Bright green
+            ItemRarity.Rare => new Color(100, 150, 255),      // Bright blue
+            ItemRarity.Epic => new Color(200, 100, 255),      // Purple
+            ItemRarity.Legendary => new Color(255, 180, 50),  // Orange/gold
+            ItemRarity.Boss => new Color(255, 80, 80),        // Red
             _ => Color.White
         };
     }

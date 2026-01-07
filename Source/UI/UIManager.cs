@@ -60,15 +60,17 @@ public class UIManager
     /// </summary>
     public void Update(float deltaTime)
     {
-        // Toggle inventory with I key
+        // Toggle inventory with I key - consume immediately to prevent double-trigger
         if (_input.IsKeyPressed(Microsoft.Xna.Framework.Input.Keys.I))
         {
+            _input.ConsumeKeyPress(Microsoft.Xna.Framework.Input.Keys.I);
             ToggleInventory();
         }
 
-        // Close inventory with Escape (if open)
+        // Close inventory with Escape (if open) - consume immediately
         if (IsInventoryOpen && _input.IsKeyPressed(Microsoft.Xna.Framework.Input.Keys.Escape))
         {
+            _input.ConsumeKeyPress(Microsoft.Xna.Framework.Input.Keys.Escape);
             CloseInventory();
         }
 
