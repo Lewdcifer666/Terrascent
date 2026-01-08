@@ -9,7 +9,7 @@ using Terrascent.Items.Effects;
 namespace Terrascent.Entities;
 
 /// <summary>
-/// The player entity with movement, jumping, and input handling.
+/// The player entity with movement, jumping, health, and input handling.
 /// </summary>
 public class Player : Entity
 {
@@ -34,6 +34,40 @@ public class Player : Entity
     private int _groundedFrames = 0;
     private const int GROUND_STICKY_FRAMES = 3;
 
+    // === HEALTH SYSTEM ===
+    public int MaxHealth { get; private set; } = 100;
+    public int CurrentHealth { get; private set; } = 100;
+    public bool IsDead { get; private set; }
+    public float HealthPercent => (float)CurrentHealth / MaxHealth;
+
+    // Invincibility frames
+    private float _iFrameTimer;
+    private const float IFRAME_DURATION = 1.0f;  // 1 second of invincibility after hit
+    public bool IsInvincible => _iFrameTimer > 0;
+
+    // Knockback
+    private Vector2 _knockbackVelocity;
+    private float _knockbackTimer;
+    private const float KNOCKBACK_DURATION = 0.25f;
+    private const float KNOCKBACK_FORCE = 250f;
+    public bool IsKnockedBack => _knockbackTimer > 0;
+
+    // Death/Respawn
+    private float _deathTimer;
+    private const float DEATH_DURATION = 2.0f;  // Time before respawn
+    private Point _spawnPoint;  // Where to respawn
+
+    // Visual flash for damage
+    private float _damageFlashTimer;
+    private const float DAMAGE_FLASH_DURATION = 0.1f;
+    public bool IsDamageFlashing => _damageFlashTimer > 0;
+
+    // Health regeneration
+    private float _regenTimer;
+    private const float REGEN_INTERVAL = 5f;  // Seconds between regen ticks
+    private const float REGEN_DELAY = 3f;     // Seconds after damage before regen starts
+    private float _timeSinceLastDamage;
+
     // Inventory
     public Inventory Inventory { get; } = new(40, 10);
 
@@ -45,6 +79,12 @@ public class Player : Entity
 
     // Currency (Risk of Rain style economy)
     public Currency Currency { get; } = new();
+
+    // Events
+    public event Action<int, int>? OnHealthChanged;  // current, max
+    public event Action? OnDeath;
+    public event Action? OnRespawn;
+    public event Action<int>? OnDamageTaken;
 
     public Player()
     {
@@ -76,8 +116,34 @@ public class Player : Entity
         // Initialize stats
         Stats.Recalculate(Inventory);
 
+        // Set max health from stats
+        UpdateMaxHealth();
+
         // Recalculate stats when inventory changes
-        Inventory.OnSlotChanged += _ => Stats.Recalculate(Inventory);
+        Inventory.OnSlotChanged += _ =>
+        {
+            Stats.Recalculate(Inventory);
+            UpdateMaxHealth();
+        };
+    }
+
+    /// <summary>
+    /// Update max health based on stats.
+    /// </summary>
+    private void UpdateMaxHealth()
+    {
+        int oldMax = MaxHealth;
+        MaxHealth = (int)Stats.MaxHealth;
+
+        // If max health increased, heal the difference
+        if (MaxHealth > oldMax)
+        {
+            CurrentHealth += MaxHealth - oldMax;
+        }
+
+        // Clamp current health
+        CurrentHealth = Math.Clamp(CurrentHealth, 0, MaxHealth);
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
     }
 
     /// <summary>
@@ -85,6 +151,9 @@ public class Player : Entity
     /// </summary>
     public void HandleInput(InputManager input, float deltaTime)
     {
+        // Can't move while dead or knocked back
+        if (IsDead || IsKnockedBack) return;
+
         // Horizontal movement
         int moveDir = input.GetHorizontalAxis();
 
@@ -200,6 +269,60 @@ public class Player : Entity
     }
 
     /// <summary>
+    /// Update player state (call every frame).
+    /// </summary>
+    public override void Update(float deltaTime)
+    {
+        // Update timers
+        if (_iFrameTimer > 0) _iFrameTimer -= deltaTime;
+        if (_damageFlashTimer > 0) _damageFlashTimer -= deltaTime;
+        _timeSinceLastDamage += deltaTime;
+
+        // Handle death timer
+        if (IsDead)
+        {
+            _deathTimer -= deltaTime;
+            if (_deathTimer <= 0)
+            {
+                Respawn();
+            }
+            return;  // Don't update physics while dead
+        }
+
+        // Handle knockback
+        if (_knockbackTimer > 0)
+        {
+            _knockbackTimer -= deltaTime;
+
+            // Apply knockback velocity
+            Velocity = new Vector2(
+                _knockbackVelocity.X * (_knockbackTimer / KNOCKBACK_DURATION),
+                Velocity.Y
+            );
+
+            // Knockback also applies upward force
+            if (_knockbackTimer > KNOCKBACK_DURATION * 0.8f && OnGround)
+            {
+                Velocity = new Vector2(Velocity.X, -150f);
+            }
+        }
+
+        // Health regeneration
+        if (!IsDead && _timeSinceLastDamage >= REGEN_DELAY && CurrentHealth < MaxHealth)
+        {
+            _regenTimer += deltaTime;
+            if (_regenTimer >= REGEN_INTERVAL)
+            {
+                _regenTimer = 0f;
+                int regenAmount = (int)MathF.Max(1, Stats.HealthRegen);
+                Heal(regenAmount);
+            }
+        }
+
+        base.Update(deltaTime);
+    }
+
+    /// <summary>
     /// Update equipped weapon based on selected hotbar item.
     /// </summary>
     public void UpdateEquippedWeapon()
@@ -227,6 +350,147 @@ public class Player : Entity
         }
     }
 
+    /// <summary>
+    /// Take damage from an enemy or hazard.
+    /// </summary>
+    public bool TakeDamage(int damage, Vector2 damageSourcePosition)
+    {
+        if (IsDead || IsInvincible) return false;
+
+        // Apply armor reduction
+        float damageReduction = Stats.Armor / (Stats.Armor + 100f);  // Diminishing returns
+        int finalDamage = (int)MathF.Max(1, damage * (1f - damageReduction));
+
+        // Check for dodge
+        if (Stats.RollProc(Stats.DodgeChance))
+        {
+            System.Diagnostics.Debug.WriteLine("DODGED!");
+            return false;
+        }
+
+        // Check for block
+        if (Stats.RollProc(Stats.BlockChance))
+        {
+            finalDamage = (int)(finalDamage * 0.5f);  // Block reduces damage by 50%
+            System.Diagnostics.Debug.WriteLine("BLOCKED! (50% damage)");
+        }
+
+        CurrentHealth -= finalDamage;
+        _iFrameTimer = IFRAME_DURATION;
+        _damageFlashTimer = DAMAGE_FLASH_DURATION;
+        _timeSinceLastDamage = 0f;
+        _regenTimer = 0f;
+
+        // Calculate knockback direction (away from damage source)
+        Vector2 knockbackDir = Center - damageSourcePosition;
+        if (knockbackDir.Length() > 0.1f)
+        {
+            knockbackDir.Normalize();
+        }
+        else
+        {
+            knockbackDir = new Vector2(FacingDirection * -1, 0);  // Default: push backward
+        }
+
+        // Apply knockback
+        _knockbackVelocity = new Vector2(knockbackDir.X * KNOCKBACK_FORCE, -100f);
+        _knockbackTimer = KNOCKBACK_DURATION;
+
+        OnDamageTaken?.Invoke(finalDamage);
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+
+        System.Diagnostics.Debug.WriteLine($"Player took {finalDamage} damage ({CurrentHealth}/{MaxHealth})");
+
+        if (CurrentHealth <= 0)
+        {
+            CurrentHealth = 0;
+            Die();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Heal the player.
+    /// </summary>
+    public void Heal(int amount)
+    {
+        if (IsDead) return;
+
+        int oldHealth = CurrentHealth;
+        CurrentHealth = Math.Min(CurrentHealth + amount, MaxHealth);
+
+        if (CurrentHealth != oldHealth)
+        {
+            OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+        }
+    }
+
+    /// <summary>
+    /// Handle player death.
+    /// </summary>
+    private void Die()
+    {
+        IsDead = true;
+        _deathTimer = DEATH_DURATION;
+        Velocity = Vector2.Zero;
+
+        System.Diagnostics.Debug.WriteLine("PLAYER DIED!");
+        OnDeath?.Invoke();
+    }
+
+    /// <summary>
+    /// Respawn the player at spawn point.
+    /// </summary>
+    private void Respawn()
+    {
+        IsDead = false;
+        CurrentHealth = MaxHealth;
+        _iFrameTimer = IFRAME_DURATION * 2f;  // Extra i-frames after respawn
+        _knockbackTimer = 0f;
+        _knockbackVelocity = Vector2.Zero;
+
+        // Respawn at spawn point
+        Position = new Vector2(
+            _spawnPoint.X * World.WorldCoordinates.TILE_SIZE - Width / 2f,
+            (_spawnPoint.Y - 3) * World.WorldCoordinates.TILE_SIZE
+        );
+        Velocity = Vector2.Zero;
+
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+        OnRespawn?.Invoke();
+
+        System.Diagnostics.Debug.WriteLine("Player respawned!");
+    }
+
+    /// <summary>
+    /// Get the render color (with damage flash and invincibility).
+    /// </summary>
+    public Color GetRenderColor()
+    {
+        if (IsDead)
+        {
+            // Fade out
+            float alpha = _deathTimer / DEATH_DURATION;
+            return Color.White * alpha;
+        }
+
+        if (IsDamageFlashing)
+        {
+            return Color.Red;
+        }
+
+        if (IsInvincible)
+        {
+            // Flicker effect
+            float flicker = MathF.Sin(_iFrameTimer * 30f);
+            return flicker > 0 ? Color.White : Color.White * 0.5f;
+        }
+
+        return Color.White;
+    }
+
     private void ExecuteJump()
     {
         Velocity = new Vector2(Velocity.X, -JumpForce);
@@ -244,6 +508,8 @@ public class Player : Entity
 
     public void SpawnAt(int tileX, int surfaceY)
     {
+        _spawnPoint = new Point(tileX, surfaceY);
+
         float spawnY = (surfaceY - 3) * World.WorldCoordinates.TILE_SIZE;
 
         Position = new Vector2(
@@ -256,5 +522,19 @@ public class Player : Entity
         _groundedFrames = 0;
         _coyoteTime = 0;
         _jumpBufferTime = 0;
+
+        // Reset health on spawn
+        IsDead = false;
+        CurrentHealth = MaxHealth;
+        _iFrameTimer = 0f;
+        _knockbackTimer = 0f;
+    }
+
+    /// <summary>
+    /// Set spawn point without teleporting.
+    /// </summary>
+    public void SetSpawnPoint(int tileX, int tileY)
+    {
+        _spawnPoint = new Point(tileX, tileY);
     }
 }

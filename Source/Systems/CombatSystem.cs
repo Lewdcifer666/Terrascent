@@ -1,6 +1,8 @@
 ﻿using Microsoft.Xna.Framework;
 using Terrascent.Combat;
 using Terrascent.Entities;
+using Terrascent.Entities.Enemies;
+using Terrascent.World;
 
 namespace Terrascent.Systems;
 
@@ -14,6 +16,8 @@ public class CombatSystem
     private float _attackTimer;
     private int _pendingChargeLevel;
     private ChargeAttack _currentAttack;
+    private Rectangle _currentAttackBox;
+    private bool _hasHitThisAttack;  // Prevent multiple hits per attack
 
     /// <summary>Is an attack currently in progress?</summary>
     public bool IsAttacking => _isAttacking;
@@ -24,11 +28,34 @@ public class CombatSystem
     /// <summary>The attack currently being performed.</summary>
     public ChargeAttack CurrentAttack => _currentAttack;
 
+    /// <summary>Current attack hitbox in world space.</summary>
+    public Rectangle CurrentAttackBox => _currentAttackBox;
+
     /// <summary>Event fired when an attack is executed.</summary>
     public event Action<AttackEventArgs>? OnAttack;
 
     /// <summary>Event fired when damage is dealt.</summary>
     public event Action<DamageEventArgs>? OnDamageDealt;
+
+    // References for combat integration
+    private EnemyManager? _enemyManager;
+    private ChunkManager? _chunkManager;
+
+    /// <summary>
+    /// Set the enemy manager for combat integration.
+    /// </summary>
+    public void SetEnemyManager(EnemyManager enemyManager)
+    {
+        _enemyManager = enemyManager;
+    }
+
+    /// <summary>
+    /// Set the chunk manager for line of sight checks.
+    /// </summary>
+    public void SetChunkManager(ChunkManager chunkManager)
+    {
+        _chunkManager = chunkManager;
+    }
 
     /// <summary>
     /// Update combat state. Call every fixed update.
@@ -43,11 +70,21 @@ public class CombatSystem
         {
             _attackTimer += deltaTime;
 
+            // Update attack box position (follows player)
+            _currentAttackBox = CalculateAttackBox(player, equippedWeapon.GetRange(_pendingChargeLevel));
+
+            // Check for enemy hits during attack window
+            if (!_hasHitThisAttack && _attackTimer >= 0.05f && _attackTimer <= _currentAttack.Duration * 0.8f)
+            {
+                TryHitEnemies(player, equippedWeapon);
+            }
+
             if (_attackTimer >= _currentAttack.Duration)
             {
                 // Attack finished
                 _isAttacking = false;
                 _attackTimer = 0f;
+                _hasHitThisAttack = false;
             }
             return;
         }
@@ -79,12 +116,13 @@ public class CombatSystem
         _isAttacking = true;
         _attackTimer = 0f;
         _pendingChargeLevel = chargeLevel;
+        _hasHitThisAttack = false;
 
         int damage = weapon.GetDamage(chargeLevel);
         float range = weapon.GetRange(chargeLevel);
 
         // Calculate attack hitbox based on player facing direction
-        Rectangle attackBox = CalculateAttackBox(player, range);
+        _currentAttackBox = CalculateAttackBox(player, range);
 
         // Fire attack event
         OnAttack?.Invoke(new AttackEventArgs
@@ -94,15 +132,45 @@ public class CombatSystem
             ChargeLevel = chargeLevel,
             Attack = _currentAttack,
             Damage = damage,
-            AttackBox = attackBox,
+            AttackBox = _currentAttackBox,
         });
 
-        System.Diagnostics.Debug.WriteLine($"Attack: {_currentAttack.Name} (Lv.{chargeLevel}) - {damage} damage");
-
         // Add weapon XP for using the attack
-        // More XP for higher charge levels
         int xpGain = 1 + chargeLevel;
         weapon.AddExperience(xpGain);
+    }
+
+    /// <summary>
+    /// Try to hit enemies with the current attack.
+    /// </summary>
+    private void TryHitEnemies(Player player, Weapon weapon)
+    {
+        if (_enemyManager == null) return;
+
+        int damage = weapon.GetDamage(_pendingChargeLevel);
+        float knockback = 150f + _pendingChargeLevel * 50f;
+
+        // Apply player damage modifiers
+        bool isCrit = player.Stats.RollProc(player.Stats.CritChance);
+        damage = player.Stats.CalculateDamage(damage, isCrit, out _);
+
+        if (isCrit)
+        {
+            System.Diagnostics.Debug.WriteLine("CRITICAL HIT!");
+            knockback *= 1.5f;
+        }
+
+        // Use line of sight check if chunk manager is available
+        if (_chunkManager != null)
+        {
+            _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center, _chunkManager);
+        }
+        else
+        {
+            _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center);
+        }
+
+        _hasHitThisAttack = true;
     }
 
     /// <summary>
@@ -137,7 +205,6 @@ public class CombatSystem
 
     /// <summary>
     /// Check if an entity is hit by the current attack and apply damage.
-    /// Call this for each potential target during an attack.
     /// </summary>
     public bool TryHitEntity(Rectangle targetHitbox, int targetHealth, out int damageDealt)
     {
@@ -146,10 +213,14 @@ public class CombatSystem
         if (!_isAttacking)
             return false;
 
-        // For now, just return if hitboxes intersect
-        // TODO: Implement proper hit detection with i-frames
+        if (!_currentAttackBox.Intersects(targetHitbox))
+            return false;
 
-        return false;
+        damageDealt = _currentAttack.DamageMultiplier > 0
+            ? (int)(_currentAttack.DamageMultiplier * 10)
+            : 10;
+
+        return true;
     }
 }
 

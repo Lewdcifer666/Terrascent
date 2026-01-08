@@ -12,6 +12,8 @@ using Terrascent.UI;
 using Terrascent.World;
 using Terrascent.World.Generation;
 using Terrascent.Economy;
+using Terrascent.Entities.Enemies;
+using Terrascent.Entities.Drops;
 
 namespace Terrascent;
 
@@ -43,6 +45,10 @@ public class TerrascentGame : Game
     private DifficultyManager _difficultyManager = null!;
     private ChestManager _chestManager = null!;
     private List<ChestEntity> _chests = new();
+
+    // Enemy System
+    private EnemyManager _enemyManager = null!;
+    private DropManager _dropManager = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -136,6 +142,31 @@ public class TerrascentGame : Game
         // Create economy systems
         _difficultyManager = new DifficultyManager();
         _chestManager = new ChestManager(_difficultyManager, _worldSeed);
+
+        // Create enemy/drop systems
+        _dropManager = new DropManager();
+        _enemyManager = new EnemyManager(_difficultyManager, _dropManager, _worldSeed);
+
+        // Connect combat system to enemies
+        _combat.SetEnemyManager(_enemyManager);
+
+        _combat.SetChunkManager(_chunkManager);
+
+        // Subscribe to enemy events
+        _enemyManager.OnEnemyKilled += enemy =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Killed {enemy.Data.Name}! +{enemy.GoldReward}g +{enemy.XPReward}xp");
+        };
+
+        _enemyManager.OnPlayerDamaged += (enemy, damage) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"OUCH! {enemy.Data.Name} hit for {damage} damage!");
+        };
+
+        _dropManager.OnDropCollected += (type, value) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Picked up {type}: +{value}");
+        };
 
         // Subscribe to chest events
         _chestManager.OnChestOpened += (type, drop) =>
@@ -293,6 +324,9 @@ public class TerrascentGame : Game
         _chests.Clear();
         SpawnTestChest();
 
+        _enemyManager.Clear();
+        _dropManager.Clear();
+
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
         _player.SpawnAt(0, surfaceY);
@@ -315,20 +349,26 @@ public class TerrascentGame : Game
         // Update equipped weapon based on hotbar selection
         _player.UpdateEquippedWeapon();
 
-        // Debug: Show what's selected
-        var selected = _player.Inventory.SelectedItem;
-        if (_input.IsKeyPressed(Keys.Tab))
+        // Update enemies
+        _enemyManager.Update(dt, _player, _chunkManager);
+
+        // Update drops
+        _dropManager.Update(dt, _player, _chunkManager);
+
+        // Debug: Spawn test enemy (F7)
+        if (_input.IsKeyPressed(Keys.F7))
         {
-            System.Diagnostics.Debug.WriteLine($"Selected slot {_player.Inventory.SelectedSlot}: {selected.Type} x{selected.Count}");
-            System.Diagnostics.Debug.WriteLine($"Is weapon? {WeaponRegistry.IsWeapon(selected.Type)}");
-            System.Diagnostics.Debug.WriteLine($"Equipped weapon: {_player.Weapons.EquippedWeapon}");
+            Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 100, -50);
+            _enemyManager.SpawnEnemy(EnemyType.Slime, spawnPos);
+            System.Diagnostics.Debug.WriteLine("Spawned test Slime!");
         }
 
-        if (_input.IsKeyPressed(Keys.Tab))
+        // Debug: Spawn harder enemy (F8)
+        if (_input.IsKeyPressed(Keys.F8))
         {
-            System.Diagnostics.Debug.WriteLine($"Stats: {_player.Stats.GetStatSummary()}");
-            System.Diagnostics.Debug.WriteLine($"Attack Speed: {_player.Stats.AttackSpeed:P0}");
-            System.Diagnostics.Debug.WriteLine($"Move Speed: {_player.Stats.MoveSpeed:F0}");
+            Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 100, -50);
+            _enemyManager.SpawnEnemy(EnemyType.Skeleton, spawnPos);
+            System.Diagnostics.Debug.WriteLine("Spawned test Skeleton!");
         }
 
         // Determine what action to take with left mouse
@@ -689,6 +729,9 @@ public class TerrascentGame : Game
         DrawTargetTile();
         DrawMiningProgress();
         DrawChests();
+        DrawEnemies();
+        DrawDrops();
+        DrawAttackHitbox();
 
         _spriteBatch.End();
 
@@ -703,6 +746,7 @@ public class TerrascentGame : Game
 
         DrawChargeBar();
         DrawGoldDisplay();
+        DrawPlayerHealthBar();
         DrawDifficultyDisplay();
         DrawChestUI();  // Chest interaction prompts (in screen space)
         DrawDebugInfo();
@@ -717,14 +761,59 @@ public class TerrascentGame : Game
 
     private void DrawPlayer()
     {
-        // Draw player body
-        Color playerColor = _player.OnGround ? Color.CornflowerBlue : Color.DodgerBlue;
+        // Skip drawing if player is fully dead (after fade out)
+        if (_player.IsDead && _player.HealthPercent <= 0) return;
+
+        // Get base color with invincibility flicker
+        Color playerColor = Color.CornflowerBlue;
+
+        if (_player.IsDamageFlashing)
+        {
+            playerColor = Color.Red;
+        }
+        else if (_player.IsInvincible && !_player.IsDead)
+        {
+            // Flicker effect - alternate between normal and semi-transparent
+            double time = DateTime.Now.Ticks / (double)TimeSpan.TicksPerMillisecond;
+            bool visible = ((int)(time / 50) % 2) == 0;  // Toggle every 50ms
+            playerColor = visible ? Color.CornflowerBlue : Color.CornflowerBlue * 0.3f;
+        }
+
+        if (_player.IsDead)
+        {
+            playerColor = Color.Gray * 0.5f;
+        }
+
         DrawRectangle(_player.Position, _player.Width, _player.Height, playerColor);
 
-        // Draw a simple "eye" to show facing direction
-        int eyeX = _player.FacingDirection > 0 ? _player.Width - 8 : 4;
-        Vector2 eyePos = new(_player.Position.X + eyeX, _player.Position.Y + 8);
-        DrawRectangle(eyePos, 4, 4, Color.White);
+        // Draw eyes (existing code)
+        int eyeSize = 4;
+        int eyeOffsetY = 8;
+        int eyeSpacing = 6;
+        Color eyeColor = Color.White;
+
+        if (_player.FacingDirection > 0)
+        {
+            DrawRectangle(
+                new Vector2(_player.Position.X + _player.Width - eyeSize - 4, _player.Position.Y + eyeOffsetY),
+                eyeSize, eyeSize, eyeColor
+            );
+            DrawRectangle(
+                new Vector2(_player.Position.X + _player.Width - eyeSize - 4 - eyeSpacing, _player.Position.Y + eyeOffsetY),
+                eyeSize, eyeSize, eyeColor
+            );
+        }
+        else
+        {
+            DrawRectangle(
+                new Vector2(_player.Position.X + 4, _player.Position.Y + eyeOffsetY),
+                eyeSize, eyeSize, eyeColor
+            );
+            DrawRectangle(
+                new Vector2(_player.Position.X + 4 + eyeSpacing, _player.Position.Y + eyeOffsetY),
+                eyeSize, eyeSize, eyeColor
+            );
+        }
     }
 
     private void DrawTargetTile()
@@ -973,18 +1062,149 @@ public class TerrascentGame : Game
         };
     }
 
+    private void DrawEnemies()
+    {
+        foreach (var enemy in _enemyManager.GetEnemies())
+        {
+            Color color = enemy.GetRenderColor();
+
+            // Draw enemy body
+            DrawRectangle(enemy.Position, enemy.Width, enemy.Height, color);
+
+            // Draw health bar above enemy (only if damaged)
+            if (enemy.CurrentHealth < enemy.MaxHealth && !enemy.IsDead)
+            {
+                int barWidth = enemy.Width;
+                int barHeight = 4;
+                float healthPercent = (float)enemy.CurrentHealth / enemy.MaxHealth;
+
+                Vector2 barPos = new Vector2(enemy.Position.X, enemy.Position.Y - 8);
+
+                // Background
+                DrawRectangle(barPos, barWidth, barHeight, Color.DarkRed);
+
+                // Health fill
+                DrawRectangle(barPos, (int)(barWidth * healthPercent), barHeight, Color.LimeGreen);
+            }
+
+            // Debug: Draw attack hitbox during attack
+            if (enemy.AIState == EnemyAIState.Attack)
+            {
+                Rectangle atkBox = enemy.GetAttackHitbox();
+                DrawRectangle(new Vector2(atkBox.X, atkBox.Y), atkBox.Width, atkBox.Height,
+                    new Color(255, 0, 0, 100));
+            }
+        }
+    }
+
+    private void DrawDrops()
+    {
+        foreach (var drop in _dropManager.GetDrops())
+        {
+            Vector2 renderPos = drop.GetRenderPosition();
+            Color color = drop.GetColor();
+
+            // Draw drop as a small gem/coin shape
+            DrawRectangle(renderPos, drop.Width, drop.Height, color);
+
+            // Add shine effect
+            DrawRectangle(
+                new Vector2(renderPos.X + 2, renderPos.Y + 2),
+                drop.Width / 3,
+                drop.Height / 3,
+                Color.White * 0.5f
+            );
+        }
+    }
+
+    private void DrawAttackHitbox()
+    {
+        if (_combat.IsAttacking)
+        {
+            var box = _combat.CurrentAttackBox;
+            DrawRectangle(new Vector2(box.X, box.Y), box.Width, box.Height,
+                new Color(255, 255, 0, 80));
+        }
+    }
+
+    private void DrawPlayerHealthBar()
+    {
+        int barWidth = 200;
+        int barHeight = 20;
+        int x = (_graphics.PreferredBackBufferWidth - barWidth) / 2;  // Centered
+        int y = 10;  // At the TOP
+
+        // Background
+        DrawRectangle(new Vector2(x - 2, y - 2), barWidth + 4, barHeight + 4, new Color(0, 0, 0, 200));
+
+        // Health bar background (dark red)
+        DrawRectangle(new Vector2(x, y), barWidth, barHeight, new Color(60, 0, 0));
+
+        // Health bar fill
+        float healthPercent = _player.HealthPercent;
+        int fillWidth = (int)(barWidth * healthPercent);
+
+        // Color changes based on health
+        Color healthColor;
+        if (healthPercent > 0.6f)
+            healthColor = Color.LimeGreen;
+        else if (healthPercent > 0.3f)
+            healthColor = Color.Yellow;
+        else
+            healthColor = Color.Red;
+
+        // Flash when recently damaged
+        if (_player.IsDamageFlashing)
+        {
+            healthColor = Color.White;
+        }
+
+        DrawRectangle(new Vector2(x, y), fillWidth, barHeight, healthColor);
+
+        // Health text
+        string healthText = $"{_player.CurrentHealth}/{_player.MaxHealth}";
+        int textX = x + barWidth / 2 - (healthText.Length * 4);  // Rough centering
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, healthText, textX, y + 6, Color.White);
+
+        // Invincibility indicator bar below health
+        if (_player.IsInvincible && !_player.IsDead)
+        {
+            DrawRectangle(new Vector2(x, y + barHeight + 2), barWidth, 3, new Color(0, 200, 255, 150));
+        }
+
+        // "DEAD" text if dead - show in center of screen
+        if (_player.IsDead)
+        {
+            string deadText = "DEAD - Respawning...";
+            int deadX = (_graphics.PreferredBackBufferWidth - deadText.Length * 8) / 2;
+            int deadY = _graphics.PreferredBackBufferHeight / 2;
+
+            // Background
+            DrawRectangle(new Vector2(deadX - 10, deadY - 10), deadText.Length * 8 + 20, 30, new Color(0, 0, 0, 220));
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, deadText, deadX, deadY, Color.Red);
+        }
+    }
+
     private void DrawDebugInfo()
     {
-        // Debug info would go here with proper font rendering
-        // For now, press Tab to see debug output in console
-
+        // Debug info - press Tab to see output in console
         if (_input.IsKeyPressed(Keys.Tab))
         {
             System.Diagnostics.Debug.WriteLine("=== DEBUG INFO ===");
+            System.Diagnostics.Debug.WriteLine($"Player Position: {_player.Position}");
+            System.Diagnostics.Debug.WriteLine($"Player HP: {_player.CurrentHealth}/{_player.MaxHealth}");
             System.Diagnostics.Debug.WriteLine($"Gold: {_player.Currency.Gold}");
             System.Diagnostics.Debug.WriteLine($"Difficulty: {_difficultyManager.DifficultyTier} ({_difficultyManager.Coefficient:F2})");
             System.Diagnostics.Debug.WriteLine($"Time: {_difficultyManager.ElapsedTime:F0}s");
             System.Diagnostics.Debug.WriteLine($"Chests Opened: {_chestManager.TotalChestsOpened}");
+            System.Diagnostics.Debug.WriteLine($"Active Enemies: {_enemyManager.ActiveEnemyCount}");
+            System.Diagnostics.Debug.WriteLine($"Stats: {_player.Stats.GetStatSummary()}");
+            System.Diagnostics.Debug.WriteLine($"Attack Speed: {_player.Stats.AttackSpeed:P0}");
+            System.Diagnostics.Debug.WriteLine($"Move Speed: {_player.Stats.MoveSpeed:F0}");
+
+            var selected = _player.Inventory.SelectedItem;
+            System.Diagnostics.Debug.WriteLine($"Selected: {selected.Type} x{selected.Count}");
+            System.Diagnostics.Debug.WriteLine($"Equipped Weapon: {(_player.Weapons.HasWeaponEquipped ? $"{_player.Weapons.EquippedType} (Lv.{_player.Weapons.EquippedWeapon?.Level})" : "None")}");
 
             foreach (var chest in _chests)
             {
@@ -993,6 +1213,7 @@ public class TerrascentGame : Game
                     System.Diagnostics.Debug.WriteLine($"Nearby chest: {chest.ChestType} - Cost: {chest.GetCost(_chestManager)}");
                 }
             }
+            System.Diagnostics.Debug.WriteLine("==================");
         }
     }
 
