@@ -27,7 +27,6 @@ public class Enemy : Entity
     public EnemyAIState AIState { get; private set; } = EnemyAIState.Idle;
     private float _stateTimer;
     private float _attackCooldownTimer;
-    private Vector2 _targetPosition;
 
     // Knockback - improved to prevent ground clipping
     private Vector2 _knockbackVelocity;
@@ -69,7 +68,6 @@ public class Enemy : Entity
     private const float SUPER_JUMP_FORCE = 450f;
     private float _jumpCooldown = 0f;
     private const float JUMP_COOLDOWN_TIME = 0.4f;
-    private bool _wasBlockedLastFrame = false;
 
     // === DESPAWN SYSTEM (Terraria-style) ===
     private float _despawnTimer;
@@ -82,11 +80,40 @@ public class Enemy : Entity
 
     // === INTEREST/CHASE TIMEOUT ===
     private float _chaseTimer;
-    private const float MAX_CHASE_TIME = 8f;  // Lose interest after 8 seconds of chasing
+    private const float MAX_CHASE_TIME = 10f;  // Lose interest after 10 seconds of chasing
     private float _lastSeenTargetTime;
+
+    // === STUCK DETECTION (Terraria-style) ===
+    private Vector2 _lastPosition;
+    private float _stuckCheckTimer;
+    private float _stuckTime;              // How long we've been stuck (not making progress)
+    private const float STUCK_CHECK_INTERVAL = 0.5f;  // Check progress every 0.5 seconds
+    private const float STUCK_THRESHOLD = 8f;         // Pixels moved to not be considered stuck
+    private const float STUCK_PATROL_TIME = 1.5f;     // Start patrolling after 1.5 seconds stuck
+    private const float STUCK_GIVEUP_TIME = 4f;       // Give up chase after 4 seconds stuck
+
+    // === NATURAL MOVEMENT (Terraria-style) ===
+    private float _directionChangeTimer;              // Timer for random direction changes
+    private float _nextDirectionChange;               // When to next consider changing direction
+    private bool _isPatrollingDuringChase;            // Currently doing patrol movement in chase
+    private int _currentMoveDirection = 1;            // Current movement direction
+
+    // === AGGRESSION TRACKING ===
+    private bool _hasBeenDamaged;                     // Has this enemy been damaged by player?
+    private float _aggroDecayTimer;                   // Timer for losing aggro after being damaged
+    private const float AGGRO_DECAY_TIME = 15f;       // Lose aggro after 15 seconds without taking damage
+
+    // === DEBUG ===
+    private static bool _debugEnabled = true;        // Toggle debug output
+    private float _debugTimer;
+    private const float DEBUG_INTERVAL = 1f;         // Print debug every 1 second
+    private static int _debugEnemyCount = 0;
+    private int _debugId;
+    private string _lastDebugReason = "";
 
     public Enemy(EnemyType type, Vector2 position, DifficultyManager difficulty, int? seed = null)
     {
+        _debugId = ++_debugEnemyCount;  // Assign unique ID for debug output
         EnemyType = type;
         Data = EnemyRegistry.Get(type);
         _random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
@@ -144,6 +171,11 @@ public class Enemy : Entity
     {
         if (AIState == newState) return;
 
+        if (_debugEnabled)
+        {
+            Console.WriteLine($"[Enemy {_debugId} {Data.Name}] STATE CHANGE: {AIState} -> {newState} | Reason={_lastDebugReason}");
+        }
+
         // Exit current state
         OnExitState(AIState);
 
@@ -169,6 +201,11 @@ public class Enemy : Entity
 
             case EnemyAIState.Chase:
                 _chaseTimer = 0f;
+                _stuckTime = 0f;
+                _stuckCheckTimer = 0f;
+                _lastPosition = Position;
+                _isPatrollingDuringChase = false;
+                _nextDirectionChange = 1f + (float)_random.NextDouble() * 2f;
                 break;
 
             case EnemyAIState.Attack:
@@ -203,6 +240,16 @@ public class Enemy : Entity
         if (_stunTimer > 0) _stunTimer -= deltaTime;
         if (_attackCooldownTimer > 0) _attackCooldownTimer -= deltaTime;
         if (_jumpCooldown > 0) _jumpCooldown -= deltaTime;
+
+        // Update aggro decay - passive enemies lose aggro over time
+        if (_hasBeenDamaged && Data.Aggression == AggressionType.PassiveUntilDamaged)
+        {
+            _aggroDecayTimer -= deltaTime;
+            if (_aggroDecayTimer <= 0)
+            {
+                _hasBeenDamaged = false;  // Lose aggro, go back to passive
+            }
+        }
 
         // Update despawn timer
         UpdateDespawnTimer(deltaTime);
@@ -339,8 +386,10 @@ public class Enemy : Entity
     {
         Velocity = new Vector2(0, Velocity.Y);
 
-        if (canSeeTarget)
+        // Check if we should chase based on aggression type
+        if (canSeeTarget && ShouldChaseTarget())
         {
+            _lastDebugReason = $"canSee={canSeeTarget} shouldChase={ShouldChaseTarget()}";
             TransitionToState(EnemyAIState.Chase);
             return;
         }
@@ -348,13 +397,15 @@ public class Enemy : Entity
         // Transition to patrol after short idle
         if (_stateTimer >= 1.5f)
         {
+            _lastDebugReason = "idle timeout";
             TransitionToState(EnemyAIState.Patrol);
         }
     }
 
     private void UpdatePatrol(float deltaTime, bool canSeeTarget)
     {
-        if (canSeeTarget)
+        // Check if we should chase based on aggression type
+        if (canSeeTarget && ShouldChaseTarget())
         {
             TransitionToState(EnemyAIState.Chase);
             return;
@@ -381,28 +432,152 @@ public class Enemy : Entity
                 _patrolDirection *= -1;
             }
         }
+    }
 
-        _wasBlockedLastFrame = CollidingLeft || CollidingRight;
+    /// <summary>
+    /// Check if this enemy should chase the target based on aggression type.
+    /// </summary>
+    private bool ShouldChaseTarget()
+    {
+        switch (Data.Aggression)
+        {
+            case AggressionType.AlwaysAggressive:
+                // Always chase when target is in range
+                return true;
+
+            case AggressionType.PassiveUntilDamaged:
+                // Only chase if we've been damaged by the player
+                return _hasBeenDamaged;
+
+            case AggressionType.ChaseWithRetry:
+                // Chase, but the retry/give-up logic is in UpdateChase
+                return true;
+
+            default:
+                return true;
+        }
     }
 
     private void UpdateChase(float deltaTime, bool canSeeTarget, bool inAttackRange)
     {
         _chaseTimer += deltaTime;
+        _directionChangeTimer += deltaTime;
 
-        // Lose interest after chasing too long without hitting
-        if (_chaseTimer >= MAX_CHASE_TIME)
+        // === DEBUG OUTPUT ===
+        if (_debugEnabled)
         {
+            _debugTimer += deltaTime;
+            if (_debugTimer >= DEBUG_INTERVAL)
+            {
+                _debugTimer = 0f;
+
+                float distToTarget = _target != null ? Vector2.Distance(Center, _target.Center) : -1;
+                float targetYDiff = _target != null ? _target.Center.Y - Center.Y : 0;
+                float targetXDiff = _target != null ? _target.Center.X - Center.X : 0;
+                bool targetBelow = _target != null && _target.Center.Y > Center.Y + Height;
+                bool targetAbove = _target != null && _target.Center.Y < Center.Y - Height;
+
+                Console.WriteLine($"[Enemy {_debugId} {Data.Name}] State={AIState} | " +
+                    $"Pos=({Position.X:F0},{Position.Y:F0}) | " +
+                    $"Vel=({Velocity.X:F1},{Velocity.Y:F1}) | " +
+                    $"OnGround={OnGround} | " +
+                    $"ColL={CollidingLeft} ColR={CollidingRight} | " +
+                    $"TargetDist={distToTarget:F0} | " +
+                    $"TargetRel=({targetXDiff:F0},{targetYDiff:F0}) | " +
+                    $"Below={targetBelow} Above={targetAbove} | " +
+                    $"StuckTime={_stuckTime:F1} | " +
+                    $"ChaseTime={_chaseTimer:F1} | " +
+                    $"Pacing={_isPatrollingDuringChase} | " +
+                    $"MoveDir={_currentMoveDirection} | " +
+                    $"Reason={_lastDebugReason}");
+            }
+        }
+
+        // === STUCK DETECTION (only for ChaseWithRetry enemies) ===
+        if (Data.Aggression == AggressionType.ChaseWithRetry)
+        {
+            _stuckCheckTimer += deltaTime;
+            if (_stuckCheckTimer >= STUCK_CHECK_INTERVAL)
+            {
+                _stuckCheckTimer = 0f;
+
+                // Check if we've made progress toward the target
+                float distanceMoved = Vector2.Distance(Position, _lastPosition);
+                float distanceToTarget = _target != null ? Vector2.Distance(Center, _target.Center) : float.MaxValue;
+                float lastDistanceToTarget = _target != null ? Vector2.Distance(_lastPosition + new Vector2(Width / 2, Height / 2), _target.Center) : float.MaxValue;
+
+                // Check if target is below us (we need to walk to an edge to drop down)
+                bool targetIsBelow = _target != null && _target.Center.Y > Center.Y + Height;
+
+                // Determine if we made progress:
+                // - Normal case: moved enough OR got closer to target
+                // - Target below: horizontal movement counts as progress (walking to edge)
+                bool madeProgress;
+                if (targetIsBelow)
+                {
+                    // Target is below - horizontal movement toward them is progress
+                    int dirToTarget = _target!.Center.X > Center.X ? 1 : -1;
+                    float horizontalProgress = (Position.X - _lastPosition.X) * dirToTarget;
+                    madeProgress = horizontalProgress > 2f || distanceMoved > STUCK_THRESHOLD;
+                    _lastDebugReason = $"TargetBelow hProg={horizontalProgress:F1} moved={distanceMoved:F1} progress={madeProgress}";
+                }
+                else
+                {
+                    // Normal case - getting closer or moving enough
+                    madeProgress = distanceMoved > STUCK_THRESHOLD || distanceToTarget < lastDistanceToTarget - 5f;
+                    _lastDebugReason = $"Normal moved={distanceMoved:F1} distDelta={lastDistanceToTarget - distanceToTarget:F1} progress={madeProgress}";
+                }
+
+                if (!madeProgress)
+                {
+                    _stuckTime += STUCK_CHECK_INTERVAL;
+                }
+                else
+                {
+                    _stuckTime = MathF.Max(0, _stuckTime - STUCK_CHECK_INTERVAL * 2f);
+                    _isPatrollingDuringChase = false;
+                }
+
+                _lastPosition = Position;
+            }
+
+            // Give up after being stuck too long (ChaseWithRetry only)
+            if (_stuckTime >= STUCK_GIVEUP_TIME)
+            {
+                _lastDebugReason = "GAVE UP - stuck too long";
+                _stuckTime = 0f;
+                _isPatrollingDuringChase = false;
+                TransitionToState(EnemyAIState.Patrol);
+                return;
+            }
+
+            // Lose interest after chasing too long overall (ChaseWithRetry only)
+            if (_chaseTimer >= MAX_CHASE_TIME)
+            {
+                _lastDebugReason = "GAVE UP - chase timeout";
+                _isPatrollingDuringChase = false;
+                TransitionToState(EnemyAIState.Patrol);
+                return;
+            }
+        }
+
+        // === PASSIVE ENEMIES: Check if aggro has decayed ===
+        if (Data.Aggression == AggressionType.PassiveUntilDamaged && !_hasBeenDamaged)
+        {
+            // Lost aggro - go back to patrol
+            _isPatrollingDuringChase = false;
             TransitionToState(EnemyAIState.Patrol);
             return;
         }
 
+        // Give up if we haven't seen the target for a while (all types)
         if (!canSeeTarget)
         {
             _lastSeenTargetTime += deltaTime;
-
-            // Give up after losing sight for 3 seconds
-            if (_lastSeenTargetTime >= 3f)
+            float giveUpTime = Data.Aggression == AggressionType.AlwaysAggressive ? 8f : 3f;
+            if (_lastSeenTargetTime >= giveUpTime)
             {
+                _isPatrollingDuringChase = false;
                 TransitionToState(EnemyAIState.Patrol);
                 return;
             }
@@ -412,37 +587,88 @@ public class Enemy : Entity
             _lastSeenTargetTime = 0f;
         }
 
+        // === ATTACK IF IN RANGE ===
         if (inAttackRange && _attackCooldownTimer <= 0)
         {
             TransitionToState(EnemyAIState.Attack);
-            _chaseTimer = 0f;  // Reset chase timer on successful attack
+            _chaseTimer = 0f;
+            _stuckTime = 0f;
             return;
         }
 
-        // Check for flee condition (low HP)
+        // === CHECK FOR FLEE (low HP) ===
         if (CurrentHealth < MaxHealth * 0.2f && Data.Movement != MovementPattern.Hopper)
         {
-            if (_random.NextDouble() < 0.01)  // 1% chance per frame to flee
+            if (_random.NextDouble() < 0.01)
             {
                 TransitionToState(EnemyAIState.Flee);
                 return;
             }
         }
 
-        // Move toward target
+        // === MOVEMENT BEHAVIOR ===
         if (_target != null)
         {
-            int direction = _target.Center.X > Center.X ? 1 : -1;
-            ApplyMovement(direction, deltaTime);
-
-            // Try to jump obstacles when blocked (walkers only)
-            if ((CollidingLeft || CollidingRight) && Data.Movement == MovementPattern.Walker)
+            // Pacing behavior only for ChaseWithRetry enemies when stuck
+            if (Data.Aggression == AggressionType.ChaseWithRetry && _stuckTime >= STUCK_PATROL_TIME)
             {
-                TryObstacleJump();
+                _isPatrollingDuringChase = true;
+            }
+
+            if (_isPatrollingDuringChase && Data.Aggression == AggressionType.ChaseWithRetry)
+            {
+                // TERRARIA-STYLE: Patrol/pace while still technically "chasing"
+                // Change direction periodically
+                if (_directionChangeTimer >= _nextDirectionChange)
+                {
+                    _directionChangeTimer = 0f;
+                    _nextDirectionChange = 0.8f + (float)_random.NextDouble() * 1.5f;
+
+                    // 70% chance to change direction, 30% chance to try toward player again
+                    if (_random.NextDouble() < 0.7f)
+                    {
+                        _currentMoveDirection *= -1;
+                    }
+                    else
+                    {
+                        // Try toward player
+                        _currentMoveDirection = _target.Center.X > Center.X ? 1 : -1;
+                        _isPatrollingDuringChase = false;  // Give direct chase another try
+                        _stuckTime = 0f;
+                    }
+                }
+
+                ApplyMovement(_currentMoveDirection, deltaTime);
+
+                // Turn around if hitting a wall
+                if (CollidingLeft || CollidingRight)
+                {
+                    _currentMoveDirection *= -1;
+
+                    // Try to jump obstacles (walkers only)
+                    if (Data.Movement == MovementPattern.Walker)
+                    {
+                        TryObstacleJump();
+                    }
+                }
+            }
+            else
+            {
+                // NORMAL CHASE: Move toward target (all aggression types)
+                int directionToTarget = _target.Center.X > Center.X ? 1 : -1;
+                _currentMoveDirection = directionToTarget;
+                ApplyMovement(directionToTarget, deltaTime);
+
+                // Try to jump obstacles when blocked (walkers only)
+                if ((CollidingLeft || CollidingRight) && Data.Movement == MovementPattern.Walker)
+                {
+                    TryObstacleJump();
+                }
             }
         }
 
-        _wasBlockedLastFrame = CollidingLeft || CollidingRight;
+        // Update facing direction
+        FacingDirection = _currentMoveDirection;
     }
 
     private void UpdateAttack(float deltaTime, bool inAttackRange)
@@ -485,8 +711,6 @@ public class Enemy : Entity
         {
             TransitionToState(EnemyAIState.Patrol);
         }
-
-        _wasBlockedLastFrame = CollidingLeft || CollidingRight;
     }
 
     /// <summary>
@@ -602,6 +826,10 @@ public class Enemy : Entity
 
         CurrentHealth -= damage;
         _iFrameTimer = IFRAME_DURATION;
+
+        // Mark as damaged - this activates aggro for PassiveUntilDamaged enemies
+        _hasBeenDamaged = true;
+        _aggroDecayTimer = AGGRO_DECAY_TIME;
 
         // Apply knockback (reduced by resistance) - HORIZONTAL ONLY to prevent ground clipping
         float effectiveKnockback = knockbackForce * (1f - Data.KnockbackResistance);

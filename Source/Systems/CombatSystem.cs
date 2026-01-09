@@ -143,6 +143,9 @@ public class CombatSystem
     /// <summary>
     /// Try to hit enemies with the current attack.
     /// </summary>
+    /// <summary>
+    /// Try to hit enemies with the current attack.
+    /// </summary>
     private void TryHitEnemies(Player player, Weapon weapon)
     {
         if (_enemyManager == null) return;
@@ -169,6 +172,16 @@ public class CombatSystem
         {
             _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center);
         }
+
+        // Fire damage dealt event (for damage numbers UI, etc.)
+        OnDamageDealt?.Invoke(new DamageEventArgs
+        {
+            Source = player,
+            Target = null!,  // Would need enemy reference for specific target
+            Damage = damage,
+            Knockback = knockback,
+            KnockbackDirection = new Vector2(player.FacingDirection, 0)
+        });
 
         _hasHitThisAttack = true;
     }

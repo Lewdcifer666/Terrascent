@@ -1,6 +1,33 @@
 ﻿namespace Terrascent.Entities.Enemies;
 
 /// <summary>
+/// Defines when an enemy will become aggressive toward the player.
+/// Based on Terraria's different AI aggression patterns.
+/// </summary>
+public enum AggressionType
+{
+    /// <summary>
+    /// Always targets and chases the player when in detection range.
+    /// Used by: Demon Eyes, Bats, Demons, Ghosts
+    /// </summary>
+    AlwaysAggressive,
+
+    /// <summary>
+    /// Only becomes aggressive when damaged by the player.
+    /// Otherwise just wanders/patrols without chasing.
+    /// Used by: Slimes (daytime)
+    /// </summary>
+    PassiveUntilDamaged,
+
+    /// <summary>
+    /// Chases player but backs off and retries when stuck/blocked.
+    /// Will eventually lose interest and wander away.
+    /// Used by: Zombies, Skeletons, most Fighter AI
+    /// </summary>
+    ChaseWithRetry
+}
+
+/// <summary>
 /// Static data defining an enemy type's base stats and behavior.
 /// </summary>
 public class EnemyData
@@ -20,6 +47,7 @@ public class EnemyData
 
     // Behavior
     public MovementPattern Movement { get; init; } = MovementPattern.Walker;
+    public AggressionType Aggression { get; init; } = AggressionType.ChaseWithRetry;
     public float DetectionRange { get; init; } = 200f;
     public float AttackRange { get; init; } = 32f;
     public float AttackCooldown { get; init; } = 1.5f;
@@ -65,6 +93,7 @@ public static class EnemyRegistry
             Width = 24,
             Height = 20,
             Movement = MovementPattern.Hopper,
+            Aggression = AggressionType.PassiveUntilDamaged,  // Terraria: only aggro when hit
             DetectionRange = 150f,
             AttackRange = 20f,
             AttackCooldown = 0.8f,
@@ -85,6 +114,7 @@ public static class EnemyRegistry
             Width = 24,
             Height = 44,
             Movement = MovementPattern.Walker,
+            Aggression = AggressionType.ChaseWithRetry,  // Terraria: backs off, retries
             DetectionRange = 180f,
             AttackRange = 28f,
             AttackCooldown = 1.2f,
@@ -126,6 +156,7 @@ public static class EnemyRegistry
             Width = 20,
             Height = 16,
             Movement = MovementPattern.Flyer,
+            Aggression = AggressionType.AlwaysAggressive,  // Always chases
             DetectionRange = 250f,
             AttackRange = 24f,
             AttackCooldown = 0.6f,
@@ -190,6 +221,7 @@ public static class EnemyRegistry
             Width = 24,
             Height = 32,
             Movement = MovementPattern.Floater,
+            Aggression = AggressionType.AlwaysAggressive,  // Always chases
             DetectionRange = 300f,
             AttackRange = 36f,
             AttackCooldown = 2.0f,
@@ -214,6 +246,7 @@ public static class EnemyRegistry
             Width = 28,
             Height = 40,
             Movement = MovementPattern.Flyer,
+            Aggression = AggressionType.AlwaysAggressive,  // Always chases
             DetectionRange = 350f,
             AttackRange = 150f,  // Ranged
             AttackCooldown = 2.5f,
@@ -256,6 +289,7 @@ public static class EnemyRegistry
             Width = 24,
             Height = 36,
             Movement = MovementPattern.Teleporter,
+            Aggression = AggressionType.AlwaysAggressive,  // Always chases
             DetectionRange = 400f,
             AttackRange = 28f,
             AttackCooldown = 1.8f,
@@ -300,6 +334,7 @@ public static class EnemyRegistry
             Width = 40,
             Height = 32,
             Movement = MovementPattern.Hopper,
+            Aggression = AggressionType.PassiveUntilDamaged,  // Like regular slime
             DetectionRange = 200f,
             AttackRange = 28f,
             AttackCooldown = 0.6f,
