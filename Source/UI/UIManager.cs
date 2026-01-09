@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Terrascent.Core;
 using Terrascent.Entities;
 using Terrascent.Items;
+using Terrascent.Progression;
 
 namespace Terrascent.UI;
 
@@ -17,6 +18,10 @@ public class UIManager
     // UI Components
     public InventoryUI InventoryUI { get; private set; } = null!;
     public XPBarUI XPBarUI { get; private set; } = null!;
+    public LevelUpUI LevelUpUI { get; private set; } = null!;
+
+    // Level-up system reference
+    private LevelUpManager? _levelUpManager;
 
     // Held item (being dragged)
     private ItemStack _heldItem = ItemStack.Empty;
@@ -28,9 +33,14 @@ public class UIManager
     public bool IsInventoryOpen { get; private set; }
 
     /// <summary>
+    /// Is the level-up panel currently open?
+    /// </summary>
+    public bool IsLevelUpOpen => _levelUpManager?.IsLevelUpActive ?? false;
+
+    /// <summary>
     /// Is any UI panel open that should pause/block gameplay?
     /// </summary>
-    public bool IsAnyPanelOpen => IsInventoryOpen;
+    public bool IsAnyPanelOpen => IsInventoryOpen || IsLevelUpOpen;
 
     /// <summary>
     /// The item currently being held/dragged by the mouse.
@@ -55,6 +65,17 @@ public class UIManager
     {
         InventoryUI = new InventoryUI(_player.Inventory, this, screenWidth, screenHeight);
         XPBarUI = new XPBarUI(_player.XP, screenWidth, screenHeight);
+
+        // LevelUpUI is initialized when SetLevelUpManager is called
+    }
+
+    /// <summary>
+    /// Set the level-up manager reference and create UI.
+    /// </summary>
+    public void SetLevelUpManager(LevelUpManager levelUpManager, int screenWidth, int screenHeight)
+    {
+        _levelUpManager = levelUpManager;
+        LevelUpUI = new LevelUpUI(levelUpManager, screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -63,6 +84,7 @@ public class UIManager
     public void OnScreenResize(int screenWidth, int screenHeight)
     {
         XPBarUI?.OnScreenResize(screenWidth, screenHeight);
+        LevelUpUI?.OnScreenResize(screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -70,6 +92,15 @@ public class UIManager
     /// </summary>
     public void Update(float deltaTime)
     {
+        // Level-up UI takes priority over everything
+        if (IsLevelUpOpen)
+        {
+            LevelUpUI?.Update(_input, deltaTime);
+            // XP bar still animates
+            XPBarUI?.Update(deltaTime);
+            return;  // Don't process other UI
+        }
+
         // Toggle inventory with I key - consume immediately to prevent double-trigger
         if (_input.IsKeyPressed(Microsoft.Xna.Framework.Input.Keys.I))
         {
@@ -348,6 +379,12 @@ public class UIManager
             {
                 DrawHeldItem(spriteBatch, pixelTexture, mousePosition);
             }
+        }
+
+        // Draw level-up UI on top of everything
+        if (IsLevelUpOpen)
+        {
+            LevelUpUI?.Draw(spriteBatch, pixelTexture, mousePosition);
         }
     }
 

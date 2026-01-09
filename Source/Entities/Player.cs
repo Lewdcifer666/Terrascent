@@ -84,6 +84,12 @@ public class Player : Entity
     // XP and Leveling System (Vampire Survivors style)
     public XPSystem XP { get; } = new();
 
+    // Level-Up System (Vampire Survivors style)
+    public LevelUpManager LevelUp { get; }
+
+    // Upgrade Stats (tracks bonuses from upgrades)
+    public UpgradeStats UpgradeStats { get; }
+
     // Events
     public event Action<int, int>? OnHealthChanged;  // current, max
     public event Action? OnDeath;
@@ -97,6 +103,10 @@ public class Player : Entity
         Height = 42;
         Gravity = 900f;
         MaxFallSpeed = 500f;
+
+        // Initialize level-up system
+        LevelUp = new LevelUpManager();
+        UpgradeStats = new UpgradeStats(LevelUp);
 
         // Give starting items for testing
         Inventory.AddItem(ItemType.Dirt, 50);
@@ -137,17 +147,54 @@ public class Player : Entity
             System.Diagnostics.Debug.WriteLine($"Player leveled up to {newLevel}!");
             OnLevelUp?.Invoke(newLevel);
 
-            // TODO: Trigger level-up choice UI in Step 3.2
+            // Queue level-up choice (Step 3.2)
+            LevelUp.QueueLevelUp();
+        };
+
+        // Subscribe to upgrade selection
+        LevelUp.OnUpgradeSelected += (upgrade, stacks) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Applied upgrade: {upgrade.Name} (x{stacks})");
+            UpgradeStats.Recalculate();
+            ApplyUpgradeStats();
         };
     }
 
     /// <summary>
-    /// Update max health based on stats.
+    /// Apply upgrade bonuses to player stats.
+    /// </summary>
+    private void ApplyUpgradeStats()
+    {
+        // Apply flat health bonus from upgrades
+        UpdateMaxHealth();
+
+        // Apply XP multiplier from upgrades
+        XP.XPMultiplier = 1f + UpgradeStats.XPGain;
+
+        // Note: Other stats are applied through PlayerStats.Recalculate
+        // which is called from the existing inventory change handler
+    }
+
+    /// <summary>
+    /// Update max health based on stats and upgrades.
     /// </summary>
     private void UpdateMaxHealth()
     {
         int oldMax = MaxHealth;
-        MaxHealth = (int)Stats.MaxHealth;
+
+        // Base health from items
+        float baseHealth = Stats.MaxHealth;
+
+        // Add flat health from upgrades
+        baseHealth += UpgradeStats.MaxHealth;
+
+        // Apply Glass Cannon penalty if active
+        if (UpgradeStats.HasGlassCannon)
+        {
+            baseHealth *= 0.5f;
+        }
+
+        MaxHealth = (int)baseHealth;
 
         // If max health increased, heal the difference
         if (MaxHealth > oldMax)

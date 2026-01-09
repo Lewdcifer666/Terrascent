@@ -181,7 +181,7 @@ public class TerrascentGame : Game
         _player.OnLevelUp += level =>
         {
             System.Diagnostics.Debug.WriteLine($"=== LEVEL UP! Now level {level} ===");
-            // TODO: Trigger level-up choice UI in Step 3.2
+            // Level-up UI is triggered automatically by Player.LevelUp.QueueLevelUp()
         };
 
         // Subscribe to chest events
@@ -248,6 +248,13 @@ public class TerrascentGame : Game
         // Initialize UI (needs graphics device ready)
         _uiManager.Initialize(
             GraphicsDevice,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
+
+        // Wire up level-up UI with player's level-up manager
+        _uiManager.SetLevelUpManager(
+            _player.LevelUp,
             _graphics.PreferredBackBufferWidth,
             _graphics.PreferredBackBufferHeight
         );
@@ -385,6 +392,13 @@ public class TerrascentGame : Game
             Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 100, -50);
             _enemyManager.SpawnEnemy(EnemyType.Skeleton, spawnPos);
             System.Diagnostics.Debug.WriteLine("Spawned test Skeleton!");
+        }
+
+        // Debug: Trigger test level-up (F9)
+        if (_input.IsKeyPressed(Keys.F9))
+        {
+            _player.XP.AddXP(_player.XP.XPToNextLevel);  // Give enough XP to level up
+            System.Diagnostics.Debug.WriteLine("Test level-up triggered!");
         }
 
         // Determine what action to take with left mouse
@@ -1209,12 +1223,15 @@ public class TerrascentGame : Game
             System.Diagnostics.Debug.WriteLine("=== DEBUG INFO ===");
             System.Diagnostics.Debug.WriteLine($"Player Position: {_player.Position}");
             System.Diagnostics.Debug.WriteLine($"Player HP: {_player.CurrentHealth}/{_player.MaxHealth}");
+            System.Diagnostics.Debug.WriteLine($"Player Level: {_player.XP.Level} ({_player.XP.CurrentXP}/{_player.XP.XPToNextLevel} XP)");
             System.Diagnostics.Debug.WriteLine($"Gold: {_player.Currency.Gold}");
             System.Diagnostics.Debug.WriteLine($"Difficulty: {_difficultyManager.DifficultyTier} ({_difficultyManager.Coefficient:F2})");
             System.Diagnostics.Debug.WriteLine($"Time: {_difficultyManager.ElapsedTime:F0}s");
             System.Diagnostics.Debug.WriteLine($"Chests Opened: {_chestManager.TotalChestsOpened}");
             System.Diagnostics.Debug.WriteLine($"Active Enemies: {_enemyManager.ActiveEnemyCount}");
             System.Diagnostics.Debug.WriteLine($"Stats: {_player.Stats.GetStatSummary()}");
+            System.Diagnostics.Debug.WriteLine($"Upgrades: {_player.UpgradeStats.GetSummary()}");
+            System.Diagnostics.Debug.WriteLine($"Rerolls: {_player.LevelUp.RerollsRemaining}/{_player.LevelUp.MaxRerolls} | Banishes: {_player.LevelUp.BanishesRemaining}/{_player.LevelUp.MaxBanishes}");
             System.Diagnostics.Debug.WriteLine($"Attack Speed: {_player.Stats.AttackSpeed:P0}");
             System.Diagnostics.Debug.WriteLine($"Move Speed: {_player.Stats.MoveSpeed:F0}");
 
