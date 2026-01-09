@@ -5,6 +5,7 @@ using Terrascent.Core;
 using Terrascent.Economy;
 using Terrascent.Items;
 using Terrascent.Items.Effects;
+using Terrascent.Progression;
 
 namespace Terrascent.Entities;
 
@@ -80,11 +81,15 @@ public class Player : Entity
     // Currency (Risk of Rain style economy)
     public Currency Currency { get; } = new();
 
+    // XP and Leveling System (Vampire Survivors style)
+    public XPSystem XP { get; } = new();
+
     // Events
     public event Action<int, int>? OnHealthChanged;  // current, max
     public event Action? OnDeath;
     public event Action? OnRespawn;
     public event Action<int>? OnDamageTaken;
+    public event Action<int>? OnLevelUp;  // new level
 
     public Player()
     {
@@ -124,6 +129,15 @@ public class Player : Entity
         {
             Stats.Recalculate(Inventory);
             UpdateMaxHealth();
+        };
+
+        // Subscribe to XP level-up events
+        XP.OnLevelUp += (newLevel, overflow) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Player leveled up to {newLevel}!");
+            OnLevelUp?.Invoke(newLevel);
+
+            // TODO: Trigger level-up choice UI in Step 3.2
         };
     }
 

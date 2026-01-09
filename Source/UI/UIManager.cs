@@ -16,6 +16,7 @@ public class UIManager
 
     // UI Components
     public InventoryUI InventoryUI { get; private set; } = null!;
+    public XPBarUI XPBarUI { get; private set; } = null!;
 
     // Held item (being dragged)
     private ItemStack _heldItem = ItemStack.Empty;
@@ -53,6 +54,15 @@ public class UIManager
     public void Initialize(GraphicsDevice graphicsDevice, int screenWidth, int screenHeight)
     {
         InventoryUI = new InventoryUI(_player.Inventory, this, screenWidth, screenHeight);
+        XPBarUI = new XPBarUI(_player.XP, screenWidth, screenHeight);
+    }
+
+    /// <summary>
+    /// Handle screen resize.
+    /// </summary>
+    public void OnScreenResize(int screenWidth, int screenHeight)
+    {
+        XPBarUI?.OnScreenResize(screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -79,6 +89,9 @@ public class UIManager
         {
             InventoryUI.Update(_input, deltaTime);
         }
+
+        // Always update XP bar (for smooth animations)
+        XPBarUI?.Update(deltaTime);
     }
 
     /// <summary>
@@ -323,6 +336,9 @@ public class UIManager
     /// </summary>
     public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, Vector2 mousePosition)
     {
+        // Always draw XP bar (HUD element)
+        XPBarUI?.Draw(spriteBatch, pixelTexture);
+
         if (IsInventoryOpen)
         {
             InventoryUI.Draw(spriteBatch, pixelTexture, mousePosition);

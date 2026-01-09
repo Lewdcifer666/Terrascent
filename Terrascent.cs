@@ -147,6 +147,9 @@ public class TerrascentGame : Game
         _dropManager = new DropManager();
         _enemyManager = new EnemyManager(_difficultyManager, _dropManager, _worldSeed);
 
+        // Connect XP system to drop manager
+        _dropManager.SetXPSystem(_player.XP);
+
         // Connect combat system to enemies
         _combat.SetEnemyManager(_enemyManager);
 
@@ -166,6 +169,19 @@ public class TerrascentGame : Game
         _dropManager.OnDropCollected += (type, value) =>
         {
             System.Diagnostics.Debug.WriteLine($"Picked up {type}: +{value}");
+        };
+
+        // Subscribe to XP events
+        _dropManager.OnXPCollected += (xp, position) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"XP collected: +{xp} (Level {_player.XP.Level}: {_player.XP.CurrentXP}/{_player.XP.XPToNextLevel})");
+        };
+
+        // Subscribe to level-up events
+        _player.OnLevelUp += level =>
+        {
+            System.Diagnostics.Debug.WriteLine($"=== LEVEL UP! Now level {level} ===");
+            // TODO: Trigger level-up choice UI in Step 3.2
         };
 
         // Subscribe to chest events

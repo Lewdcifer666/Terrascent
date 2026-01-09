@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
+using Terrascent.Progression;
 using Terrascent.World;
 
 namespace Terrascent.Entities.Drops;
@@ -11,10 +12,26 @@ public class DropManager
     private readonly List<Drop> _drops = new();
     private const int MAX_DROPS = 500;  // Prevent too many drops
 
+    // XP System reference
+    private XPSystem? _xpSystem;
+
     /// <summary>
     /// Event fired when a drop is collected.
     /// </summary>
     public event Action<DropType, int>? OnDropCollected;
+
+    /// <summary>
+    /// Event fired when XP is gained (for UI feedback).
+    /// </summary>
+    public event Action<int, Vector2>? OnXPCollected;
+
+    /// <summary>
+    /// Set the XP system reference for XP gem collection.
+    /// </summary>
+    public void SetXPSystem(XPSystem xpSystem)
+    {
+        _xpSystem = xpSystem;
+    }
 
     /// <summary>
     /// Spawn drops from an enemy death.
@@ -29,12 +46,63 @@ public class DropManager
             SpawnDrop(DropType.Gold, goldPerDrop, position);
         }
 
-        // XP gems (split based on value)
-        int xpDrops = Math.Clamp(xp / 15 + 1, 1, 4);
-        int xpPerDrop = xp / xpDrops;
-        for (int i = 0; i < xpDrops; i++)
+        // XP gems - use tier system to determine drop count
+        SpawnXPDrops(position, xp);
+    }
+
+    /// <summary>
+    /// Spawn XP drops with intelligent splitting based on value.
+    /// Larger XP values spawn fewer, bigger gems.
+    /// </summary>
+    private void SpawnXPDrops(Vector2 position, int totalXP)
+    {
+        if (totalXP <= 0) return;
+
+        // Determine optimal gem distribution
+        // Small XP: many tiny gems (satisfying pickup)
+        // Large XP: fewer large gems (less clutter)
+
+        if (totalXP <= 10)
         {
-            SpawnDrop(DropType.XPGem, xpPerDrop, position);
+            // Single tiny gem
+            SpawnDrop(DropType.XPGem, totalXP, position);
+        }
+        else if (totalXP <= 30)
+        {
+            // 2-3 small gems
+            int count = 2 + (totalXP > 20 ? 1 : 0);
+            int perGem = totalXP / count;
+            for (int i = 0; i < count; i++)
+            {
+                SpawnDrop(DropType.XPGem, perGem, position);
+            }
+        }
+        else if (totalXP <= 60)
+        {
+            // 1 medium + 1-2 small
+            int mediumValue = totalXP / 2;
+            int remainder = totalXP - mediumValue;
+            SpawnDrop(DropType.XPGem, mediumValue, position);
+
+            int smallCount = Math.Clamp(remainder / 10, 1, 2);
+            int smallValue = remainder / smallCount;
+            for (int i = 0; i < smallCount; i++)
+            {
+                SpawnDrop(DropType.XPGem, smallValue, position);
+            }
+        }
+        else if (totalXP <= 100)
+        {
+            // 1 large + 1 small
+            int largeValue = (int)(totalXP * 0.7f);
+            int smallValue = totalXP - largeValue;
+            SpawnDrop(DropType.XPGem, largeValue, position);
+            SpawnDrop(DropType.XPGem, smallValue, position);
+        }
+        else
+        {
+            // 1 huge gem
+            SpawnDrop(DropType.XPGem, totalXP, position);
         }
     }
 
@@ -99,16 +167,24 @@ public class DropManager
                 break;
 
             case DropType.XPGem:
-                // XP will be handled in Phase 3
-                // For now, just fire the event
+                if (_xpSystem != null)
+                {
+                    bool leveledUp = _xpSystem.AddXP(drop.Value);
+                    OnXPCollected?.Invoke(drop.Value, drop.Center);
+
+                    if (leveledUp)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Player reached level {_xpSystem.Level}!");
+                    }
+                }
                 break;
 
             case DropType.HealthOrb:
-                // TODO: Heal player
+                player.Heal(drop.Value);
                 break;
 
             case DropType.ManaOrb:
-                // TODO: Restore mana
+                // TODO: Restore mana when mana system is implemented
                 break;
         }
 
@@ -127,5 +203,13 @@ public class DropManager
     public void Clear()
     {
         _drops.Clear();
+    }
+
+    /// <summary>
+    /// Get count of drops by type.
+    /// </summary>
+    public int CountByType(DropType type)
+    {
+        return _drops.Count(d => d.Type == type);
     }
 }

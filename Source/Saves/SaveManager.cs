@@ -10,7 +10,7 @@ namespace Terrascent.Saves;
 /// </summary>
 public class SaveManager
 {
-    private const int SAVE_VERSION = 1;
+    private const int SAVE_VERSION = 2;  // Updated for XP system
     private const string WORLD_FILE = "world.dat";
     private const string PLAYER_FILE = "player.dat";
     private const string CHUNKS_FOLDER = "chunks";
@@ -210,7 +210,7 @@ public class SaveManager
     #region Player Data
 
     /// <summary>
-    /// Save player data (position, inventory).
+    /// Save player data (position, inventory, XP, currency, health).
     /// </summary>
     public void SavePlayer(Player player)
     {
@@ -231,6 +231,16 @@ public class SaveManager
         writer.Write(player.Velocity.X);
         writer.Write(player.Velocity.Y);
 
+        // Health
+        writer.Write(player.CurrentHealth);
+        writer.Write(player.MaxHealth);
+
+        // XP System
+        player.XP.SaveTo(writer);
+
+        // Currency
+        player.Currency.SaveTo(writer);
+
         // Inventory
         writer.Write(player.Inventory.Size);
         writer.Write(player.Inventory.SelectedSlot);
@@ -242,7 +252,7 @@ public class SaveManager
             writer.Write(stack.Count);
         }
 
-        System.Diagnostics.Debug.WriteLine($"Saved player at {player.Position}");
+        System.Diagnostics.Debug.WriteLine($"Saved player at {player.Position} (Level {player.XP.Level})");
     }
 
     /// <summary>
@@ -261,7 +271,7 @@ public class SaveManager
             using var reader = new BinaryReader(stream);
 
             int version = reader.ReadInt32();
-            if (version != SAVE_VERSION)
+            if (version < 1 || version > SAVE_VERSION)
             {
                 System.Diagnostics.Debug.WriteLine($"Player save version mismatch: {version}");
                 return false;
@@ -276,6 +286,21 @@ public class SaveManager
             float velX = reader.ReadSingle();
             float velY = reader.ReadSingle();
             player.Velocity = new Vector2(velX, velY);
+
+            // Version 2+ includes health, XP, and currency
+            if (version >= 2)
+            {
+                // Health
+                int currentHealth = reader.ReadInt32();
+                int maxHealth = reader.ReadInt32();
+                // We'll set health after loading stats
+
+                // XP System
+                player.XP.LoadFrom(reader);
+
+                // Currency
+                player.Currency.LoadFrom(reader);
+            }
 
             // Inventory
             int invSize = reader.ReadInt32();
@@ -303,7 +328,7 @@ public class SaveManager
                 reader.ReadInt32();
             }
 
-            System.Diagnostics.Debug.WriteLine($"Loaded player at {player.Position}");
+            System.Diagnostics.Debug.WriteLine($"Loaded player at {player.Position} (Level {player.XP.Level})");
             return true;
         }
         catch (Exception ex)
