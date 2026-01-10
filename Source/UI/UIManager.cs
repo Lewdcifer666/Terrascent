@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Terrascent.Core;
 using Terrascent.Entities;
+using Terrascent.Entities.Bosses;
 using Terrascent.Items;
 using Terrascent.Progression;
 
@@ -19,9 +20,13 @@ public class UIManager
     public InventoryUI InventoryUI { get; private set; } = null!;
     public XPBarUI XPBarUI { get; private set; } = null!;
     public LevelUpUI LevelUpUI { get; private set; } = null!;
+    public BossHealthBarUI BossHealthBarUI { get; private set; } = null!;
 
     // Level-up system reference
     private LevelUpManager? _levelUpManager;
+
+    // Boss manager reference
+    private BossManager? _bossManager;
 
     // Held item (being dragged)
     private ItemStack _heldItem = ItemStack.Empty;
@@ -79,12 +84,22 @@ public class UIManager
     }
 
     /// <summary>
+    /// Set the boss manager reference and create UI.
+    /// </summary>
+    public void SetBossManager(BossManager bossManager, int screenWidth, int screenHeight)
+    {
+        _bossManager = bossManager;
+        BossHealthBarUI = new BossHealthBarUI(bossManager, screenWidth, screenHeight);
+    }
+
+    /// <summary>
     /// Handle screen resize.
     /// </summary>
     public void OnScreenResize(int screenWidth, int screenHeight)
     {
         XPBarUI?.OnScreenResize(screenWidth, screenHeight);
         LevelUpUI?.OnScreenResize(screenWidth, screenHeight);
+        BossHealthBarUI?.OnScreenResize(screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -92,6 +107,9 @@ public class UIManager
     /// </summary>
     public void Update(float deltaTime)
     {
+        // Always update boss health bar (it handles visibility internally)
+        BossHealthBarUI?.Update(deltaTime);
+
         // Level-up UI takes priority over everything
         if (IsLevelUpOpen)
         {
@@ -369,6 +387,9 @@ public class UIManager
     {
         // Always draw XP bar (HUD element)
         XPBarUI?.Draw(spriteBatch, pixelTexture);
+
+        // Always draw boss health bar (it handles visibility internally)
+        BossHealthBarUI?.Draw(spriteBatch, pixelTexture);
 
         if (IsInventoryOpen)
         {

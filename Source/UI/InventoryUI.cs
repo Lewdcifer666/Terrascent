@@ -26,7 +26,7 @@ public class InventoryUI
 
     // Panel position and dimensions
     private Rectangle _panelBounds;
-    private Rectangle[] _slotBounds;
+    private Rectangle[] _slotBounds = Array.Empty<Rectangle>();
 
     // State
     private int _hoveredSlot = -1;

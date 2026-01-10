@@ -145,4 +145,59 @@ public enum ItemType : ushort
     BrainStalksItem = 752,
     HardlightAfterburnerItem = 753,
     SentientMeatHookItem = 754,
+
+    // === Boss Summoning Items (800-849) ===
+    /// <summary>Summons Eye of Terror at night.</summary>
+    SuspiciousLookingEye = 800,
+
+    /// <summary>Summons King Slime anywhere.</summary>
+    SlimeCrown = 801,
+
+    /// <summary>Summons Brain of Depths underground.</summary>
+    BloodySpine = 802,
+
+    /// <summary>Summons Skeletal Warlord at dungeon.</summary>
+    AncientSkull = 803,
+
+    /// <summary>Summons Queen Bee in jungle.</summary>
+    Abeemination = 804,
+
+    /// <summary>Summons Wall of Shadows in underworld (throw in lava).</summary>
+    GuideVoodooDoll = 805,
+
+    // === Boss Trophies (850-899) ===
+    EyeOfTerrorTrophy = 850,
+    KingSlimeTrophy = 851,
+    BrainOfDepthsTrophy = 852,
+    SkeletalWarlordTrophy = 853,
+    QueenBeeTrophy = 854,
+    WallOfShadowsTrophy = 855,
+
+    // === Boss Drops (900-999) ===
+    /// <summary>Dropped by Eye of Terror.</summary>
+    DemoniteOre = 900,
+    ShadowScale = 901,
+
+    /// <summary>Dropped by King Slime.</summary>
+    RoyalGel = 902,
+    SlimySaddle = 903,
+
+    /// <summary>Dropped by Brain of Depths.</summary>
+    CrimtaneOre = 904,
+    TissueSample = 905,
+
+    /// <summary>Dropped by Skeletal Warlord.</summary>
+    BoneKey = 906,
+    SkeletronHand = 907,
+
+    /// <summary>Dropped by Queen Bee.</summary>
+    BeeWax = 908,
+    Honeycomb = 909,
+    BeeGun = 910,
+
+    /// <summary>Dropped by Wall of Shadows.</summary>
+    Pwnhammer = 911,
+    EmblemWarrior = 912,
+    EmblemRanger = 913,
+    EmblemSorcerer = 914,
 }

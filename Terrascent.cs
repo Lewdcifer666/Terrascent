@@ -5,15 +5,15 @@ using Terrascent.Combat;
 using Terrascent.Core;
 using Terrascent.Economy;
 using Terrascent.Entities;
+using Terrascent.Entities.Bosses;
+using Terrascent.Entities.Drops;
+using Terrascent.Entities.Enemies;
 using Terrascent.Items;
 using Terrascent.Saves;
 using Terrascent.Systems;
 using Terrascent.UI;
 using Terrascent.World;
 using Terrascent.World.Generation;
-using Terrascent.Economy;
-using Terrascent.Entities.Enemies;
-using Terrascent.Entities.Drops;
 
 namespace Terrascent;
 
@@ -49,6 +49,9 @@ public class TerrascentGame : Game
     // Enemy System
     private EnemyManager _enemyManager = null!;
     private DropManager _dropManager = null!;
+
+    // Boss System
+    private BossManager _bossManager = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -147,12 +150,15 @@ public class TerrascentGame : Game
         _dropManager = new DropManager();
         _enemyManager = new EnemyManager(_difficultyManager, _dropManager, _worldSeed);
 
+        // Create boss system
+        _bossManager = new BossManager(_difficultyManager, _dropManager, _enemyManager, _worldSeed);
+
         // Connect XP system to drop manager
         _dropManager.SetXPSystem(_player.XP);
 
-        // Connect combat system to enemies
+        // Connect combat system to enemies and bosses
         _combat.SetEnemyManager(_enemyManager);
-
+        _combat.SetBossManager(_bossManager);
         _combat.SetChunkManager(_chunkManager);
 
         // Subscribe to enemy events
@@ -169,6 +175,41 @@ public class TerrascentGame : Game
         _dropManager.OnDropCollected += (type, value) =>
         {
             System.Diagnostics.Debug.WriteLine($"Picked up {type}: +{value}");
+        };
+
+        // Subscribe to boss events
+        _bossManager.OnBossSpawned += boss =>
+        {
+            System.Diagnostics.Debug.WriteLine($"=== BOSS SPAWNED: {boss.Data.Name} ({boss.CurrentHealth} HP) ===");
+        };
+
+        _bossManager.OnBossDefeated += boss =>
+        {
+            System.Diagnostics.Debug.WriteLine($"=== BOSS DEFEATED: {boss.Data.Name}! ===");
+        };
+
+        _bossManager.OnBossPhaseChanged += (boss, phase) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Boss {boss.Data.Name} entered {phase}!");
+        };
+
+        _bossManager.OnBossEnraged += boss =>
+        {
+            System.Diagnostics.Debug.WriteLine($"!!! {boss.Data.Name} HAS ENRAGED !!!");
+        };
+
+        _bossManager.OnBossItemDropped += (itemType, count, position) =>
+        {
+            // Add dropped items to player inventory
+            int added = _player.Inventory.AddItem(itemType, count);
+            if (added > 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOOT] Added {added}x {itemType} to inventory!");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOOT] Inventory full! Could not add {count}x {itemType}");
+            }
         };
 
         // Subscribe to XP events
@@ -255,6 +296,13 @@ public class TerrascentGame : Game
         // Wire up level-up UI with player's level-up manager
         _uiManager.SetLevelUpManager(
             _player.LevelUp,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
+
+        // Wire up boss health bar UI with boss manager
+        _uiManager.SetBossManager(
+            _bossManager,
             _graphics.PreferredBackBufferWidth,
             _graphics.PreferredBackBufferHeight
         );
@@ -349,6 +397,7 @@ public class TerrascentGame : Game
 
         _enemyManager.Clear();
         _dropManager.Clear();
+        _bossManager.Clear();
 
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
@@ -378,6 +427,9 @@ public class TerrascentGame : Game
         // Update drops
         _dropManager.Update(dt, _player, _chunkManager);
 
+        // Update bosses
+        _bossManager.Update(dt, _player, _chunkManager);
+
         // Debug: Spawn test enemy (F7)
         if (_input.IsKeyPressed(Keys.F7))
         {
@@ -399,6 +451,30 @@ public class TerrascentGame : Game
         {
             _player.XP.AddXP(_player.XP.XPToNextLevel);  // Give enough XP to level up
             System.Diagnostics.Debug.WriteLine("Test level-up triggered!");
+        }
+
+        // Debug: Spawn King Slime (F10)
+        if (_input.IsKeyPressed(Keys.F10))
+        {
+            Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 150, -100);
+            _bossManager.SummonBoss(BossType.KingSlime, spawnPos);
+            System.Diagnostics.Debug.WriteLine("Spawned King Slime boss!");
+        }
+
+        // Debug: Spawn Eye of Terror (F11)
+        if (_input.IsKeyPressed(Keys.F11))
+        {
+            Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 200, -150);
+            _bossManager.SummonBoss(BossType.EyeOfTerror, spawnPos);
+            System.Diagnostics.Debug.WriteLine("Spawned Eye of Terror boss!");
+        }
+
+        // Debug: Spawn Skeletal Warlord (F12)
+        if (_input.IsKeyPressed(Keys.F12))
+        {
+            Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 150, -50);
+            _bossManager.SummonBoss(BossType.SkeletalWarlord, spawnPos);
+            System.Diagnostics.Debug.WriteLine("Spawned Skeletal Warlord boss!");
         }
 
         // Determine what action to take with left mouse
@@ -760,6 +836,7 @@ public class TerrascentGame : Game
         DrawMiningProgress();
         DrawChests();
         DrawEnemies();
+        DrawBosses();
         DrawDrops();
         DrawAttackHitbox();
 
@@ -1123,6 +1200,86 @@ public class TerrascentGame : Game
                 Rectangle atkBox = enemy.GetAttackHitbox();
                 DrawRectangle(new Vector2(atkBox.X, atkBox.Y), atkBox.Width, atkBox.Height,
                     new Color(255, 0, 0, 100));
+            }
+        }
+    }
+
+    private void DrawBosses()
+    {
+        foreach (var boss in _bossManager.GetBosses())
+        {
+            // Convert boss color tuple to XNA Color
+            var colorTuple = boss.Data.Color;
+            Color baseColor = new Color(colorTuple.R, colorTuple.G, colorTuple.B);
+            Color bossColor = baseColor;
+
+            // Damage flash
+            if (boss.IsDamageFlashing)
+            {
+                bossColor = Color.White;
+            }
+            // Phase transition flash
+            else if (boss.IsPhaseTransitioning)
+            {
+                double time = DateTime.Now.Ticks / (double)TimeSpan.TicksPerMillisecond;
+                bool flash = ((int)(time / 100) % 2) == 0;
+                bossColor = flash ? Color.White : baseColor;
+            }
+            // Enrage pulsing effect
+            else if (boss.IsEnraged)
+            {
+                double time = DateTime.Now.Ticks / (double)TimeSpan.TicksPerMillisecond;
+                float pulse = (float)(Math.Sin(time / 100) * 0.3 + 0.7);
+                bossColor = Color.Lerp(baseColor, Color.Red, 1f - pulse);
+            }
+
+            // Draw boss body with outline for visibility
+            // Outer dark outline
+            DrawRectangle(boss.Position - new Vector2(2), boss.Width + 4, boss.Height + 4, new Color(0, 0, 0, 200));
+            // Boss body
+            DrawRectangle(boss.Position, boss.Width, boss.Height, bossColor);
+
+            // Draw eyes (for visual interest)
+            int eyeSize = Math.Max(4, boss.Width / 8);
+            int eyeY = boss.Height / 4;
+
+            if (boss.FacingDirection > 0)
+            {
+                // Facing right
+                DrawRectangle(new Vector2(boss.Position.X + boss.Width - eyeSize * 2 - 4, boss.Position.Y + eyeY),
+                    eyeSize, eyeSize, Color.White);
+                DrawRectangle(new Vector2(boss.Position.X + boss.Width - eyeSize * 4 - 8, boss.Position.Y + eyeY),
+                    eyeSize, eyeSize, Color.White);
+                // Pupils
+                DrawRectangle(new Vector2(boss.Position.X + boss.Width - eyeSize - 4, boss.Position.Y + eyeY + 1),
+                    eyeSize / 2, eyeSize / 2, Color.Black);
+                DrawRectangle(new Vector2(boss.Position.X + boss.Width - eyeSize * 3 - 8, boss.Position.Y + eyeY + 1),
+                    eyeSize / 2, eyeSize / 2, Color.Black);
+            }
+            else
+            {
+                // Facing left
+                DrawRectangle(new Vector2(boss.Position.X + 4, boss.Position.Y + eyeY),
+                    eyeSize, eyeSize, Color.White);
+                DrawRectangle(new Vector2(boss.Position.X + eyeSize * 2 + 8, boss.Position.Y + eyeY),
+                    eyeSize, eyeSize, Color.White);
+                // Pupils
+                DrawRectangle(new Vector2(boss.Position.X + 4, boss.Position.Y + eyeY + 1),
+                    eyeSize / 2, eyeSize / 2, Color.Black);
+                DrawRectangle(new Vector2(boss.Position.X + eyeSize * 2 + 8, boss.Position.Y + eyeY + 1),
+                    eyeSize / 2, eyeSize / 2, Color.Black);
+            }
+
+            // Debug: Draw attack hitbox during attack
+            if (boss.IsAttacking)
+            {
+                Rectangle? atkBoxNullable = boss.GetAttackHitbox();
+                if (atkBoxNullable.HasValue)
+                {
+                    Rectangle atkBox = atkBoxNullable.Value;
+                    DrawRectangle(new Vector2(atkBox.X, atkBox.Y), atkBox.Width, atkBox.Height,
+                        new Color(255, 100, 0, 100));
+                }
             }
         }
     }

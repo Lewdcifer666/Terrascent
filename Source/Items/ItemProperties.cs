@@ -610,6 +610,291 @@ public static class ItemRegistry
             Rarity = ItemRarity.Legendary,
             SellValue = 500,
         },
+
+        // === Boss Summoning Items ===
+        [ItemType.SuspiciousLookingEye] = new ItemProperties
+        {
+            Name = "Suspicious Looking Eye",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Rare,
+            SellValue = 100,
+        },
+
+        [ItemType.SlimeCrown] = new ItemProperties
+        {
+            Name = "Slime Crown",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Rare,
+            SellValue = 100,
+        },
+
+        [ItemType.BloodySpine] = new ItemProperties
+        {
+            Name = "Bloody Spine",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Rare,
+            SellValue = 150,
+        },
+
+        [ItemType.AncientSkull] = new ItemProperties
+        {
+            Name = "Ancient Skull",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.Abeemination] = new ItemProperties
+        {
+            Name = "Abeemination",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Rare,
+            SellValue = 150,
+        },
+
+        [ItemType.GuideVoodooDoll] = new ItemProperties
+        {
+            Name = "Guide Voodoo Doll",
+            MaxStack = 20,
+            Category = ItemCategory.Consumable,
+            Rarity = ItemRarity.Epic,
+            SellValue = 500,
+        },
+
+        // === Boss Trophies ===
+        [ItemType.EyeOfTerrorTrophy] = new ItemProperties
+        {
+            Name = "Eye of Terror Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 1000,
+        },
+
+        [ItemType.KingSlimeTrophy] = new ItemProperties
+        {
+            Name = "King Slime Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 1000,
+        },
+
+        [ItemType.BrainOfDepthsTrophy] = new ItemProperties
+        {
+            Name = "Brain of Depths Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 1000,
+        },
+
+        [ItemType.SkeletalWarlordTrophy] = new ItemProperties
+        {
+            Name = "Skeletal Warlord Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 1000,
+        },
+
+        [ItemType.QueenBeeTrophy] = new ItemProperties
+        {
+            Name = "Queen Bee Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 1000,
+        },
+
+        [ItemType.WallOfShadowsTrophy] = new ItemProperties
+        {
+            Name = "Wall of Shadows Trophy",
+            MaxStack = 99,
+            Category = ItemCategory.Misc,
+            Rarity = ItemRarity.Boss,
+            SellValue = 2000,
+        },
+
+        // === Boss Drops - Materials ===
+        [ItemType.DemoniteOre] = new ItemProperties
+        {
+            Name = "Demonite Ore",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Rare,
+            SellValue = 50,
+        },
+
+        [ItemType.ShadowScale] = new ItemProperties
+        {
+            Name = "Shadow Scale",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Rare,
+            SellValue = 75,
+        },
+
+        [ItemType.RoyalGel] = new ItemProperties
+        {
+            Name = "Royal Gel",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Epic,
+            SellValue = 250,
+        },
+
+        [ItemType.SlimySaddle] = new ItemProperties
+        {
+            Name = "Slimy Saddle",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 500,
+        },
+
+        [ItemType.CrimtaneOre] = new ItemProperties
+        {
+            Name = "Crimtane Ore",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Rare,
+            SellValue = 50,
+        },
+
+        [ItemType.TissueSample] = new ItemProperties
+        {
+            Name = "Tissue Sample",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Rare,
+            SellValue = 75,
+        },
+
+        [ItemType.BoneKey] = new ItemProperties
+        {
+            Name = "Bone Key",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 300,
+        },
+
+        [ItemType.SkeletronHand] = new ItemProperties
+        {
+            Name = "Skeletron Hand",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Epic,
+            SellValue = 500,
+        },
+
+        [ItemType.BeeWax] = new ItemProperties
+        {
+            Name = "Bee Wax",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 30,
+        },
+
+        [ItemType.Honeycomb] = new ItemProperties
+        {
+            Name = "Honeycomb",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.BeeGun] = new ItemProperties
+        {
+            Name = "Bee Gun",
+            MaxStack = 1,
+            Category = ItemCategory.Weapon,
+            Rarity = ItemRarity.Rare,
+            SellValue = 400,
+            Damage = 12,
+        },
+
+        [ItemType.Pwnhammer] = new ItemProperties
+        {
+            Name = "Pwnhammer",
+            MaxStack = 1,
+            Category = ItemCategory.Tool,
+            Rarity = ItemRarity.Boss,
+            SellValue = 2000,
+            ToolPower = 100,
+        },
+
+        [ItemType.EmblemWarrior] = new ItemProperties
+        {
+            Name = "Warrior Emblem",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Epic,
+            SellValue = 1000,
+        },
+
+        [ItemType.EmblemRanger] = new ItemProperties
+        {
+            Name = "Ranger Emblem",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Epic,
+            SellValue = 1000,
+        },
+
+        [ItemType.EmblemSorcerer] = new ItemProperties
+        {
+            Name = "Sorcerer Emblem",
+            MaxStack = 1,
+            Category = ItemCategory.Accessory,
+            Rarity = ItemRarity.Epic,
+            SellValue = 1000,
+        },
+
+        // === Additional Materials ===
+        [ItemType.Gel] = new ItemProperties
+        {
+            Name = "Gel",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Common,
+            SellValue = 1,
+        },
+
+        [ItemType.Lens] = new ItemProperties
+        {
+            Name = "Lens",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Common,
+            SellValue = 5,
+        },
+
+        [ItemType.SilverBar] = new ItemProperties
+        {
+            Name = "Silver Bar",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 45,
+        },
+
+        [ItemType.GoldBar] = new ItemProperties
+        {
+            Name = "Gold Bar",
+            MaxStack = 999,
+            Category = ItemCategory.Material,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 60,
+        },
     };
 
     /// <summary>

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Terrascent.Combat;
 using Terrascent.Entities;
+using Terrascent.Entities.Bosses;
 using Terrascent.Entities.Enemies;
 using Terrascent.World;
 
@@ -39,6 +40,7 @@ public class CombatSystem
 
     // References for combat integration
     private EnemyManager? _enemyManager;
+    private BossManager? _bossManager;
     private ChunkManager? _chunkManager;
 
     /// <summary>
@@ -47,6 +49,14 @@ public class CombatSystem
     public void SetEnemyManager(EnemyManager enemyManager)
     {
         _enemyManager = enemyManager;
+    }
+
+    /// <summary>
+    /// Set the boss manager for combat integration.
+    /// </summary>
+    public void SetBossManager(BossManager bossManager)
+    {
+        _bossManager = bossManager;
     }
 
     /// <summary>
@@ -144,11 +154,11 @@ public class CombatSystem
     /// Try to hit enemies with the current attack.
     /// </summary>
     /// <summary>
-    /// Try to hit enemies with the current attack.
+    /// Try to hit enemies and bosses with the current attack.
     /// </summary>
     private void TryHitEnemies(Player player, Weapon weapon)
     {
-        if (_enemyManager == null) return;
+        if (_enemyManager == null && _bossManager == null) return;
 
         int damage = weapon.GetDamage(_pendingChargeLevel);
         float knockback = 150f + _pendingChargeLevel * 50f;
@@ -163,14 +173,24 @@ public class CombatSystem
             knockback *= 1.5f;
         }
 
-        // Use line of sight check if chunk manager is available
-        if (_chunkManager != null)
+        // Damage regular enemies
+        if (_enemyManager != null)
         {
-            _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center, _chunkManager);
+            // Use line of sight check if chunk manager is available
+            if (_chunkManager != null)
+            {
+                _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center, _chunkManager);
+            }
+            else
+            {
+                _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center);
+            }
         }
-        else
+
+        // Damage bosses
+        if (_bossManager != null)
         {
-            _enemyManager.DamageEnemy(_currentAttackBox, damage, knockback, player.Center);
+            _bossManager.DamageBoss(_currentAttackBox, damage, knockback, player.Center);
         }
 
         // Fire damage dealt event (for damage numbers UI, etc.)

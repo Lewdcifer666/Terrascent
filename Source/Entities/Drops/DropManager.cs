@@ -127,6 +127,31 @@ public class DropManager
     }
 
     /// <summary>
+    /// Spawn gold drops at a position (splits large amounts into multiple drops).
+    /// </summary>
+    public void SpawnGoldDrop(Vector2 position, int gold)
+    {
+        if (gold <= 0) return;
+
+        // Split large gold amounts into multiple drops
+        int goldDrops = Math.Clamp(gold / 50 + 1, 1, 8);
+        int goldPerDrop = gold / goldDrops;
+
+        for (int i = 0; i < goldDrops; i++)
+        {
+            SpawnDrop(DropType.Gold, goldPerDrop, position);
+        }
+    }
+
+    /// <summary>
+    /// Spawn XP drops at a position (uses tier system for intelligent splitting).
+    /// </summary>
+    public void SpawnXPDrop(Vector2 position, int xp)
+    {
+        SpawnXPDrops(position, xp);
+    }
+
+    /// <summary>
     /// Update all drops and check for player collection.
     /// </summary>
     public void Update(float deltaTime, Player player, ChunkManager chunks)
