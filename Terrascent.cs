@@ -115,9 +115,10 @@ public class TerrascentGame : Game
             // Load player data
             if (!_saveManager.LoadPlayer(_player))
             {
-                // No player save, spawn at surface
-                int surfaceY = _worldGenerator.GetSurfaceHeight(0);
-                _player.SpawnAt(0, surfaceY);
+                // No player save, spawn at world center (Forest biome)
+                int spawnX = _worldGenerator.Config.Width / 2;
+                int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
+                _player.SpawnAt(spawnX, surfaceY);
             }
         }
         else
@@ -133,8 +134,8 @@ public class TerrascentGame : Game
                 LoadRadius = 4
             };
 
-            // Spawn player above the surface at world center
-            int spawnX = 0;
+            // Spawn player above the surface at world center (Forest biome)
+            int spawnX = _worldGenerator.Config.Width / 2;
             int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
             _player.SpawnAt(spawnX, surfaceY);
         }
@@ -156,8 +157,9 @@ public class TerrascentGame : Game
         _dropManager = new DropManager();
         _enemyManager = new EnemyManager(_difficultyManager, _dropManager, _worldSeed);
 
-        // Create biome manager
+        // Create biome manager and wire to world config
         _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
+        _biomeManager.SetWorldConfig(_worldGenerator.Config);
 
         // Wire biome manager to enemy manager for biome-aware spawning
         _enemyManager.SetBiomeManager(_biomeManager);
@@ -446,12 +448,14 @@ public class TerrascentGame : Game
             _graphics.PreferredBackBufferHeight
         );
 
-        // Respawn player
-        int surfaceY = _worldGenerator.GetSurfaceHeight(0);
-        _player.SpawnAt(0, surfaceY);
+        // Respawn player at world center (Forest biome)
+        int spawnX = _worldGenerator.Config.Width / 2;
+        int surfaceY = _worldGenerator.GetSurfaceHeight(spawnX);
+        _player.SpawnAt(spawnX, surfaceY);
         _camera.CenterOn(_player.Center);
 
         System.Diagnostics.Debug.WriteLine($"Regenerated world with seed: {_worldSeed}");
+        System.Diagnostics.Debug.WriteLine($"  Player spawned at X={spawnX} (world center)");
     }
 
     private void FixedUpdate()
@@ -1221,18 +1225,108 @@ public class TerrascentGame : Game
     {
         return type switch
         {
+            // === Natural Terrain ===
             TileType.Dirt => new Color(139, 90, 43),
             TileType.Stone => new Color(128, 128, 128),
             TileType.Grass => new Color(34, 139, 34),
-            TileType.Leaves => new Color(34, 120, 34),
             TileType.Sand => new Color(238, 214, 175),
+            TileType.Clay => new Color(146, 81, 68),
+            TileType.Mud => new Color(92, 68, 52),
+            TileType.Snow => new Color(235, 245, 255),
+            TileType.Ice => new Color(185, 220, 245),
+            TileType.Ash => new Color(68, 68, 68),
+
+            // === Desert Tiles ===
+            TileType.Sandstone => new Color(210, 180, 140),
+            TileType.HardenedSand => new Color(200, 170, 120),
+            TileType.DesertFossil => new Color(180, 160, 110),
+
+            // === Snow/Ice Tiles ===
+            TileType.SnowBrick => new Color(220, 230, 240),
+            TileType.ThinIce => new Color(200, 230, 250),
+
+            // === Jungle Tiles ===
+            TileType.JungleGrass => new Color(100, 170, 70),
+            TileType.LivingMahogany => new Color(120, 60, 30),
+            TileType.Hive => new Color(200, 150, 50),
+            TileType.HoneyBlock => new Color(255, 200, 80),
+
+            // === Mushroom Tiles ===
+            TileType.MushroomGrass => new Color(93, 127, 255),
+
+            // === Corruption Tiles ===
+            TileType.CorruptGrass => new Color(120, 100, 170),
+            TileType.Ebonstone => new Color(75, 70, 100),
+            TileType.CorruptSand => new Color(150, 130, 180),
+            TileType.CorruptSandstone => new Color(130, 110, 160),
+            TileType.CorruptIce => new Color(140, 130, 180),
+
+            // === Crimson Tiles ===
+            TileType.CrimsonGrass => new Color(180, 80, 80),
+            TileType.Crimstone => new Color(140, 60, 60),
+            TileType.CrimsonSand => new Color(190, 110, 110),
+            TileType.CrimsonSandstone => new Color(160, 80, 80),
+            TileType.CrimsonIce => new Color(180, 100, 120),
+            TileType.Flesh => new Color(150, 50, 50),
+
+            // === Hallow Tiles ===
+            TileType.HallowedGrass => new Color(140, 200, 255),
+            TileType.Pearlstone => new Color(200, 180, 220),
+            TileType.HallowedSand => new Color(255, 220, 255),
+            TileType.HallowedSandstone => new Color(230, 200, 240),
+            TileType.HallowedIce => new Color(200, 180, 255),
+
+            // === Ores ===
             TileType.CopperOre => new Color(184, 115, 51),
             TileType.IronOre => new Color(165, 142, 142),
             TileType.SilverOre => new Color(192, 192, 210),
             TileType.GoldOre => new Color(255, 215, 0),
+            TileType.CobaltOre => new Color(60, 120, 200),
+            TileType.MythrilOre => new Color(100, 200, 150),
+            TileType.AdamantiteOre => new Color(200, 80, 80),
+            TileType.Hellstone => new Color(200, 80, 40),
+            TileType.DemoniteOre => new Color(100, 80, 140),
+            TileType.CrimtaneOre => new Color(180, 70, 70),
+
+            // === Wood & Plants ===
             TileType.Wood => new Color(160, 82, 45),
+            TileType.LivingWood => new Color(140, 90, 50),
+            TileType.Leaves => new Color(34, 120, 34),
+            TileType.Cactus => new Color(85, 140, 65),
+            TileType.Mushroom => new Color(200, 180, 160),
+            TileType.GlowingMushroom => new Color(80, 120, 220),
+            TileType.BorealWood => new Color(130, 110, 90),
+            TileType.PalmWood => new Color(180, 140, 90),
+            TileType.RichMahogany => new Color(140, 70, 40),
+            TileType.Ebonwood => new Color(80, 70, 100),
+            TileType.Shadewood => new Color(120, 60, 70),
+            TileType.Pearlwood => new Color(230, 220, 240),
+
+            // === Vines ===
+            TileType.Vines => new Color(30, 100, 30),
+            TileType.JungleVines => new Color(80, 150, 60),
+            TileType.CorruptVines => new Color(100, 80, 150),
+            TileType.CrimsonVines => new Color(160, 60, 60),
+            TileType.HallowedVines => new Color(120, 180, 230),
+
+            // === Bricks & Crafted ===
+            TileType.StoneBrick => new Color(150, 150, 150),
+            TileType.WoodPlatform => new Color(140, 90, 50),
             TileType.Torch => Color.Yellow,
-            _ => Color.Magenta
+            TileType.GrayBrick => new Color(130, 130, 130),
+            TileType.RedBrick => new Color(160, 80, 70),
+            TileType.DungeonBrick => new Color(60, 60, 100),
+            TileType.CrackedDungeonBrick => new Color(50, 50, 85),
+            TileType.LihzahrdBrick => new Color(150, 100, 50),
+            TileType.Obsidian => new Color(40, 30, 50),
+            TileType.CrystalBlock => new Color(200, 150, 220),
+            TileType.GraniteBlock => new Color(50, 50, 70),
+            TileType.MarbleBlock => new Color(230, 230, 235),
+
+            // === Special ===
+            TileType.Bedrock => new Color(30, 30, 30),
+
+            _ => Color.Magenta  // Fallback for truly unknown types
         };
     }
 

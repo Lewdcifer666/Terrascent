@@ -116,9 +116,9 @@ public class BiomeUI
 
     public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
     {
-        // Position: Top-right corner, below any other HUD elements
+        // Position: Top-right corner, below difficulty timer (which ends at y=50)
         int x = _screenWidth - 200 - PADDING;
-        int y = PADDING + 35;  // Below the top row of HUD
+        int y = PADDING + 45;  // Below difficulty display (y=10, height=40)
         int width = 200;
 
         // Calculate alpha for fade effect
