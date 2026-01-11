@@ -282,8 +282,40 @@ public class WorldGenerator
             TerrainFrequency
         );
 
+        // Get base biome height modifier
         BiomeType biome = GetSurfaceBiome(worldX);
-        float biomeHeightMod = biome switch
+        float biomeHeightMod = GetBiomeHeightMod(biome);
+        int baseLevel = GetBiomeBaseLevel(biome);
+
+        // Check for transition zone and interpolate height
+        if (_biomePlacement != null)
+        {
+            var blendInfo = _biomePlacement.GetBiomeBlendInfo(worldX);
+            if (blendInfo.IsTransition)
+            {
+                // Get height mods for both biomes
+                float heightMod1 = GetBiomeHeightMod(blendInfo.Biome1);
+                float heightMod2 = GetBiomeHeightMod(blendInfo.Biome2);
+                int baseLevel1 = GetBiomeBaseLevel(blendInfo.Biome1);
+                int baseLevel2 = GetBiomeBaseLevel(blendInfo.Biome2);
+
+                // Smoothly interpolate between biome heights using smoothstep
+                float t = blendInfo.BlendFactor;
+                float smoothT = t * t * (3f - 2f * t);  // Smoothstep for gradual transition
+
+                biomeHeightMod = heightMod1 + (heightMod2 - heightMod1) * smoothT;
+                baseLevel = (int)(baseLevel1 + (baseLevel2 - baseLevel1) * smoothT);
+            }
+        }
+
+        int height = (int)(noise * TerrainHeight * biomeHeightMod);
+        return baseLevel + height;
+    }
+
+    /// <summary>Get the height modifier for a biome.</summary>
+    private float GetBiomeHeightMod(BiomeType biome)
+    {
+        return biome switch
         {
             BiomeType.Desert => 0.3f,
             BiomeType.Snow => 1.2f,
@@ -292,15 +324,16 @@ public class WorldGenerator
             BiomeType.Ocean => 0.2f,
             _ => 1.0f
         };
+    }
 
-        int baseLevel = SurfaceLevel;
-        if (biome == BiomeType.Ocean)
+    /// <summary>Get the base surface level for a biome.</summary>
+    private int GetBiomeBaseLevel(BiomeType biome)
+    {
+        return biome switch
         {
-            baseLevel += 20;
-        }
-
-        int height = (int)(noise * TerrainHeight * biomeHeightMod);
-        return baseLevel + height;
+            BiomeType.Ocean => SurfaceLevel + 20,
+            _ => SurfaceLevel
+        };
     }
 
     private TileType GetTileType(int worldX, int worldY, int surfaceY, BiomeType surfaceBiome)
@@ -329,21 +362,36 @@ public class WorldGenerator
 
             if (blendInfo.IsTransition)
             {
-                // Use noise to create natural-looking transition with larger patches
-                // Lower frequency = larger blobs of each biome tile type
-                float transitionNoise = _biomeNoise.Noise01(worldX * 0.08f + 5000, worldY * 0.05f);
+                // SURFACE TILES (depth 0-2): Respect zone boundaries strictly
+                // Only switch biomes when ENTERING a new zone, not when approaching edge from inside
+                if (depth <= 2)
+                {
+                    // Get the actual biome at this position (respects zone boundaries)
+                    BiomeType actualBiome = _biomePlacement.GetBiomeAt(worldX);
 
-                // Add some variation with depth for more organic look
-                float depthVariation = MathF.Sin(depth * 0.15f) * 0.12f;
-                float threshold = blendInfo.BlendFactor + depthVariation;
+                    // Only blend in the Forest (no-zone) areas approaching a biome zone
+                    // If we're inside a defined zone, use that zone's biome
+                    if (actualBiome != BiomeType.Forest)
+                    {
+                        // We're inside a biome zone - use it, no blending
+                        return GetBiomeTile(worldX, worldY, depth, actualBiome, layer);
+                    }
 
-                // Clamp threshold to valid range
-                threshold = Math.Clamp(threshold, 0.0f, 1.0f);
+                    // We're in Forest approaching another biome - use blend
+                    BiomeType surfaceBiomeChoice = blendInfo.BlendFactor >= 0.5f ? blendInfo.Biome2 : blendInfo.Biome1;
+                    return GetBiomeTile(worldX, worldY, depth, surfaceBiomeChoice, layer);
+                }
+
+                // UNDERGROUND TILES (depth 3+): Use noise for organic blending
+                // Lower frequency noise = larger patches of each biome
+                float transitionNoise = _biomeNoise.Noise01(worldX * 0.05f + 5000, worldY * 0.03f);
+
+                // Bias the noise based on blend factor - the further into new biome, the more new tiles
+                float threshold = blendInfo.BlendFactor;
 
                 // When noise < threshold, pick Biome2 (new), else pick Biome1 (old)
-                // This gives gradual transition: low threshold = mostly old, high threshold = mostly new
-                BiomeType selectedBiome = transitionNoise < threshold ? blendInfo.Biome2 : blendInfo.Biome1;
-                return GetBiomeTile(worldX, worldY, depth, selectedBiome, layer);
+                BiomeType undergroundBiomeChoice = transitionNoise < threshold ? blendInfo.Biome2 : blendInfo.Biome1;
+                return GetBiomeTile(worldX, worldY, depth, undergroundBiomeChoice, layer);
             }
         }
 
@@ -373,12 +421,13 @@ public class WorldGenerator
 
     /// <summary>
     /// Get the tile type based on biome, depth, and layer.
-    /// Implements Terraria-style terrain composition:
-    /// - Surface: Grass/biome surface tile
-    /// - Shallow (1-15): Pure subsurface material
-    /// - Upper Underground (16-40): 50/50 subsurface/stone mix with clay
-    /// - Lower Underground (40+): Mostly stone with subsurface patches
-    /// - Cavern: Stone with granite/marble mini-biomes
+    /// Implements Terraria-style terrain composition with GRADUAL transitions:
+    /// - Surface (depth 0): Grass/biome surface tile
+    /// - Very Shallow (1-5): Pure dirt/subsurface, no stone
+    /// - Shallow (6-20): Mostly dirt, rare small stone veins (5-15%)
+    /// - Upper Underground (21-50): Dirt with increasing stone (20-50%)
+    /// - Lower Underground (51-100): Mostly stone with dirt patches (60-80% stone)
+    /// - Deep/Cavern (100+): Almost all stone (85%+ stone)
     /// </summary>
     private TileType GetBiomeTile(int worldX, int worldY, int depth, BiomeType biome, WorldLayer layer)
     {
@@ -388,31 +437,36 @@ public class WorldGenerator
             return GetSurfaceTile(biome);
         }
 
-        // === SHALLOW LAYER (depth 1-15): Pure subsurface ===
-        if (depth <= DirtDepth)
+        // === VERY SHALLOW (depth 1-5): Pure subsurface, NO stone at all ===
+        if (depth <= 5)
+        {
+            return GetVeryShallowTile(biome);
+        }
+
+        // === SHALLOW (depth 6-20): Mostly dirt, rare stone/ore veins ===
+        if (depth <= 20)
         {
             return GetShallowTile(worldX, worldY, depth, biome);
         }
 
-        // Check for ores before terrain (ores can appear in any solid tile)
+        // Check for ores (they appear below shallow layer)
         TileType oreType = GetOreType(worldX, worldY, depth, layer);
         if (oreType != TileType.Air)
             return oreType;
 
-        // === UPPER UNDERGROUND (depth 16-40): 50/50 mix with clay ===
-        int upperUndergroundEnd = DirtDepth + 25;  // ~40 tiles deep
-        if (depth <= upperUndergroundEnd && (layer == WorldLayer.Surface || layer == WorldLayer.Underground))
+        // === UPPER UNDERGROUND (depth 21-50): Increasing stone mix ===
+        if (depth <= 50)
         {
             return GetUpperUndergroundTile(worldX, worldY, depth, biome);
         }
 
-        // === LOWER UNDERGROUND / CAVERN: Mostly stone ===
-        if (layer == WorldLayer.Underground)
+        // === LOWER UNDERGROUND (depth 51-100): Mostly stone ===
+        if (depth <= 100 || layer == WorldLayer.Underground)
         {
             return GetLowerUndergroundTile(worldX, worldY, depth, biome);
         }
 
-        // === CAVERN LAYER: Stone with mini-biomes ===
+        // === CAVERN LAYER (depth 100+): Stone with mini-biomes ===
         if (layer == WorldLayer.Cavern)
         {
             return GetCavernTile(worldX, worldY, depth, biome);
@@ -439,44 +493,54 @@ public class WorldGenerator
         };
     }
 
-    /// <summary>Get shallow subsurface tile (pure dirt/sand/snow layer).</summary>
-    private TileType GetShallowTile(int worldX, int worldY, int depth, BiomeType biome)
+    /// <summary>Get very shallow tile (depth 1-5): Pure subsurface, no stone.</summary>
+    private TileType GetVeryShallowTile(BiomeType biome)
     {
-        // Some biomes have depth-based transitions in shallow layer
         return biome switch
         {
-            // Snow: Snow for first few tiles, then transition to Ice
-            BiomeType.Snow => depth < 5 ? TileType.Snow :
-                             (depth < 10 ? (GetMixNoise(worldX, worldY, 0.15f) > 0.5f ? TileType.Ice : TileType.Snow) : TileType.Ice),
-
-            // Desert/Ocean: Pure sand throughout shallow layer
+            BiomeType.Snow => TileType.Snow,
             BiomeType.Desert or BiomeType.Ocean => TileType.Sand,
-
-            // Jungle: Pure mud
-            BiomeType.Jungle => TileType.Mud,
-
-            // Mushroom: Mud substrate
-            BiomeType.Mushroom => TileType.Mud,
-
-            // Evil biomes: Dirt (evil stone starts deeper)
-            BiomeType.Corruption or BiomeType.Crimson => TileType.Dirt,
-
-            // Hallow: Dirt (pearlstone starts deeper)
-            BiomeType.Hallow => TileType.Dirt,
-
-            // Forest (default): Pure dirt
+            BiomeType.Jungle or BiomeType.Mushroom => TileType.Mud,
             _ => TileType.Dirt
         };
     }
 
-    /// <summary>Get upper underground tile (~50/50 dirt/stone mix with clay).</summary>
+    /// <summary>Get shallow tile (depth 6-20): Mostly dirt, rare stone veins (5-15%).</summary>
+    private TileType GetShallowTile(int worldX, int worldY, int depth, BiomeType biome)
+    {
+        // Calculate stone probability: 5% at depth 6, up to 15% at depth 20
+        float stoneChance = 0.05f + (depth - 6) * 0.007f;  // ~5% to ~15%
+
+        float noise = GetMixNoise(worldX, worldY, 0.12f);
+
+        // Very rare stone veins
+        if (noise > (1.0f - stoneChance))
+        {
+            return GetBiomeStone(biome);
+        }
+
+        // Biome-specific subsurface
+        return biome switch
+        {
+            BiomeType.Snow => depth < 10 ? TileType.Snow : TileType.Ice,
+            BiomeType.Desert or BiomeType.Ocean => TileType.Sand,
+            BiomeType.Jungle or BiomeType.Mushroom => TileType.Mud,
+            BiomeType.Corruption or BiomeType.Crimson or BiomeType.Hallow => TileType.Dirt,
+            _ => TileType.Dirt
+        };
+    }
+
+    /// <summary>Get upper underground tile (depth 21-50): Increasing stone mix (20-50%).</summary>
     private TileType GetUpperUndergroundTile(int worldX, int worldY, int depth, BiomeType biome)
     {
-        float mixNoise = GetMixNoise(worldX, worldY, 0.08f);
-        float clayNoise = _terrainNoise.Noise01(worldX * 0.12f + 500, worldY * 0.12f);
+        // Calculate stone probability: 20% at depth 21, up to 50% at depth 50
+        float stoneChance = 0.20f + (depth - 21) * 0.01f;  // ~20% to ~50%
 
-        // Clay pockets in forest/default areas (about 8% of underground)
-        if (biome == BiomeType.Forest && clayNoise > 0.92f && mixNoise > 0.3f)
+        float mixNoise = GetMixNoise(worldX, worldY, 0.08f);
+        float clayNoise = _terrainNoise.Noise01(worldX * 0.1f + 500, worldY * 0.1f);
+
+        // Clay pockets in forest areas (about 5% chance)
+        if (biome == BiomeType.Forest && clayNoise > 0.95f)
         {
             return TileType.Clay;
         }
@@ -489,40 +553,32 @@ public class WorldGenerator
                 return evilOre;
         }
 
+        // Stone vs subsurface based on probability
+        bool isStone = mixNoise > (1.0f - stoneChance);
+
         return biome switch
         {
-            // Snow: Ice with occasional snow patches
-            BiomeType.Snow => mixNoise > 0.3f ? TileType.Ice : TileType.Snow,
-
-            // Desert: Transition from Sand to HardenedSand to Sandstone
-            BiomeType.Desert or BiomeType.Ocean =>
-                depth < DirtDepth + 10 ? (mixNoise > 0.4f ? TileType.HardenedSand : TileType.Sand) :
-                (mixNoise > 0.5f ? TileType.Sandstone : TileType.HardenedSand),
-
-            // Jungle: Mud with stone appearing
-            BiomeType.Jungle => mixNoise > 0.6f ? TileType.Stone : TileType.Mud,
-
-            // Mushroom: Mud with stone
-            BiomeType.Mushroom => mixNoise > 0.6f ? TileType.Stone : TileType.Mud,
-
-            // Corruption: Dirt transitioning to Ebonstone
-            BiomeType.Corruption => mixNoise > 0.5f ? TileType.Ebonstone : TileType.Dirt,
-
-            // Crimson: Dirt transitioning to Crimstone
-            BiomeType.Crimson => mixNoise > 0.5f ? TileType.Crimstone : TileType.Dirt,
-
-            // Hallow: Dirt transitioning to Pearlstone
-            BiomeType.Hallow => mixNoise > 0.5f ? TileType.Pearlstone : TileType.Dirt,
-
-            // Forest: 50/50 Dirt/Stone mix with clay
-            _ => mixNoise > 0.5f ? TileType.Stone : TileType.Dirt
+            BiomeType.Snow => isStone ? TileType.Ice : TileType.Snow,
+            BiomeType.Desert or BiomeType.Ocean => isStone ?
+                (depth > 35 ? TileType.Sandstone : TileType.HardenedSand) : TileType.Sand,
+            BiomeType.Jungle or BiomeType.Mushroom => isStone ? TileType.Stone : TileType.Mud,
+            BiomeType.Corruption => isStone ? TileType.Ebonstone : TileType.Dirt,
+            BiomeType.Crimson => isStone ? TileType.Crimstone : TileType.Dirt,
+            BiomeType.Hallow => isStone ? TileType.Pearlstone : TileType.Dirt,
+            _ => isStone ? TileType.Stone : TileType.Dirt
         };
     }
 
-    /// <summary>Get lower underground tile (mostly stone with dirt patches).</summary>
+    /// <summary>Get lower underground tile (depth 51-100): Mostly stone (60-80%).</summary>
     private TileType GetLowerUndergroundTile(int worldX, int worldY, int depth, BiomeType biome)
     {
-        // Check for evil biome ores first
+        // Calculate stone probability: 60% at depth 51, up to 80% at depth 100
+        float stoneChance = 0.60f + (depth - 51) * 0.004f;  // ~60% to ~80%
+        stoneChance = Math.Min(stoneChance, 0.80f);  // Cap at 80%
+
+        float mixNoise = GetMixNoise(worldX, worldY, 0.06f);
+
+        // Check for evil biome ores
         if (biome == BiomeType.Corruption || biome == BiomeType.Crimson)
         {
             TileType evilOre = GetEvilOre(worldX, worldY, biome, WorldLayer.Underground);
@@ -530,43 +586,25 @@ public class WorldGenerator
                 return evilOre;
         }
 
-        float mixNoise = GetMixNoise(worldX, worldY, 0.06f);
-        float dirtPatchNoise = _terrainNoise.Noise01(worldX * 0.04f + 1000, worldY * 0.04f);
-
-        // Occasional dirt patches (about 20%)
-        bool isDirtPatch = dirtPatchNoise > 0.8f;
+        // Dirt pockets in stone
+        bool isDirt = mixNoise > stoneChance;
 
         return biome switch
         {
-            // Snow: Mostly ice
-            BiomeType.Snow => isDirtPatch && mixNoise > 0.7f ? TileType.Snow : TileType.Ice,
-
-            // Desert: Mostly sandstone with hardened sand patches
-            BiomeType.Desert or BiomeType.Ocean =>
-                isDirtPatch ? TileType.HardenedSand : TileType.Sandstone,
-
-            // Jungle: Stone with mud patches
-            BiomeType.Jungle => isDirtPatch ? TileType.Mud : TileType.Stone,
-
-            // Mushroom: Stone with mud patches
-            BiomeType.Mushroom => isDirtPatch ? TileType.Mud : TileType.Stone,
-
-            // Evil biomes: Mostly evil stone
-            BiomeType.Corruption => isDirtPatch && mixNoise > 0.8f ? TileType.Dirt : TileType.Ebonstone,
-            BiomeType.Crimson => isDirtPatch && mixNoise > 0.8f ? TileType.Dirt : TileType.Crimstone,
-
-            // Hallow: Mostly pearlstone
-            BiomeType.Hallow => isDirtPatch && mixNoise > 0.8f ? TileType.Dirt : TileType.Pearlstone,
-
-            // Forest: Mostly stone with dirt patches
-            _ => isDirtPatch ? TileType.Dirt : TileType.Stone
+            BiomeType.Snow => isDirt ? TileType.Snow : TileType.Ice,
+            BiomeType.Desert or BiomeType.Ocean => isDirt ? TileType.HardenedSand : TileType.Sandstone,
+            BiomeType.Jungle or BiomeType.Mushroom => isDirt ? TileType.Mud : TileType.Stone,
+            BiomeType.Corruption => isDirt ? TileType.Dirt : TileType.Ebonstone,
+            BiomeType.Crimson => isDirt ? TileType.Dirt : TileType.Crimstone,
+            BiomeType.Hallow => isDirt ? TileType.Dirt : TileType.Pearlstone,
+            _ => isDirt ? TileType.Dirt : TileType.Stone
         };
     }
 
-    /// <summary>Get cavern layer tile (stone with mini-biomes).</summary>
+    /// <summary>Get cavern layer tile (depth 100+): Almost all stone (85%+) with mini-biomes.</summary>
     private TileType GetCavernTile(int worldX, int worldY, int depth, BiomeType biome)
     {
-        // Check for evil biome ores first (higher chance in cavern)
+        // Check for evil biome ores (higher chance in cavern)
         if (biome == BiomeType.Corruption || biome == BiomeType.Crimson)
         {
             TileType evilOre = GetEvilOre(worldX, worldY, biome, WorldLayer.Cavern);
@@ -582,19 +620,20 @@ public class WorldGenerator
         if (miniBiomeNoise < 0.15f)
             return TileType.MarbleBlock;
 
-        // Occasional dirt pockets even in cavern
-        float dirtPocketNoise = _terrainNoise.Noise01(worldX * 0.03f + 2000, worldY * 0.03f);
-        if (dirtPocketNoise > 0.9f)
+        // Rare dirt pockets even in cavern (15%)
+        float dirtPocketNoise = GetMixNoise(worldX, worldY, 0.04f);
+        if (dirtPocketNoise > 0.85f)
         {
             return biome switch
             {
                 BiomeType.Jungle => TileType.Mud,
                 BiomeType.Snow => TileType.Ice,
+                BiomeType.Desert => TileType.Sandstone,
                 _ => TileType.Dirt
             };
         }
 
-        // Deep biome stone (influence fades with depth)
+        // Deep biome stone
         return GetDeepBiomeStone(biome, worldX, worldY);
     }
 

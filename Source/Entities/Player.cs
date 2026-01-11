@@ -63,6 +63,11 @@ public class Player : Entity
     private const float DAMAGE_FLASH_DURATION = 0.1f;
     public bool IsDamageFlashing => _damageFlashTimer > 0;
 
+    // === DEBUG FLAGS ===
+    public bool GodMode { get; set; } = false;
+    public bool Noclip { get; set; } = false;
+    private const float NOCLIP_SPEED = 500f;  // Fast movement when noclipping
+
     // Health regeneration
     private float _regenTimer;
     private const float REGEN_INTERVAL = 5f;  // Seconds between regen ticks
@@ -212,8 +217,23 @@ public class Player : Entity
     /// </summary>
     public void HandleInput(InputManager input, float deltaTime)
     {
-        // Can't move while dead or knocked back
-        if (IsDead || IsKnockedBack) return;
+        // Can't move while dead or knocked back (unless noclip)
+        if (IsDead || (IsKnockedBack && !Noclip)) return;
+
+        // === NOCLIP MODE: Free flight with no collision ===
+        if (Noclip)
+        {
+            int moveX = input.GetHorizontalAxis();
+            int moveY = 0;
+            if (input.IsKeyDown(Keys.W) || input.IsKeyDown(Keys.Up)) moveY = -1;
+            if (input.IsKeyDown(Keys.S) || input.IsKeyDown(Keys.Down)) moveY = 1;
+
+            // Apply noclip velocity directly (no acceleration curve)
+            Velocity = new Vector2(moveX * NOCLIP_SPEED, moveY * NOCLIP_SPEED);
+
+            if (moveX != 0) FacingDirection = moveX;
+            return;
+        }
 
         // Horizontal movement
         int moveDir = input.GetHorizontalAxis();
@@ -350,8 +370,8 @@ public class Player : Entity
             return;  // Don't update physics while dead
         }
 
-        // Handle knockback
-        if (_knockbackTimer > 0)
+        // Handle knockback (skip if noclipping)
+        if (_knockbackTimer > 0 && !Noclip)
         {
             _knockbackTimer -= deltaTime;
 
@@ -368,19 +388,52 @@ public class Player : Entity
             }
         }
 
-        // Health regeneration
-        if (!IsDead && _timeSinceLastDamage >= REGEN_DELAY && CurrentHealth < MaxHealth)
+        // Health regeneration (instant in god mode)
+        if (!IsDead && CurrentHealth < MaxHealth)
         {
-            _regenTimer += deltaTime;
-            if (_regenTimer >= REGEN_INTERVAL)
+            if (GodMode)
             {
-                _regenTimer = 0f;
-                int regenAmount = (int)MathF.Max(1, Stats.HealthRegen);
-                Heal(regenAmount);
+                // Instant full heal in god mode
+                CurrentHealth = MaxHealth;
+                OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+            }
+            else if (_timeSinceLastDamage >= REGEN_DELAY)
+            {
+                _regenTimer += deltaTime;
+                if (_regenTimer >= REGEN_INTERVAL)
+                {
+                    _regenTimer = 0f;
+                    int regenAmount = (int)MathF.Max(1, Stats.HealthRegen);
+                    Heal(regenAmount);
+                }
             }
         }
 
-        base.Update(deltaTime);
+        // Skip gravity when noclipping
+        if (!Noclip)
+        {
+            base.Update(deltaTime);
+        }
+    }
+
+    /// <summary>
+    /// Override ApplyMovement to support noclip mode.
+    /// </summary>
+    public override void ApplyMovement(float deltaTime, World.ChunkManager chunks)
+    {
+        if (Noclip)
+        {
+            // Noclip: just move without collision
+            Position += Velocity * deltaTime;
+            OnGround = false;
+            CollidingLeft = false;
+            CollidingRight = false;
+            CollidingAbove = false;
+            return;
+        }
+
+        // Normal collision-based movement
+        base.ApplyMovement(deltaTime, chunks);
     }
 
     /// <summary>
@@ -416,6 +469,9 @@ public class Player : Entity
     /// </summary>
     public bool TakeDamage(int damage, Vector2 damageSourcePosition)
     {
+        // God mode prevents all damage
+        if (GodMode) return false;
+
         if (IsDead || IsInvincible) return false;
 
         // Apply armor reduction

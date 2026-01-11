@@ -73,6 +73,11 @@ public class TerrascentGame : Game
     private Point _mouseTilePos;
     private bool _isTargetValid;
 
+    // Debug and Map state
+    private bool _showDebugOverlay = false;
+    private bool _showMap = false;
+    private Dictionary<Point, bool> _exploredTiles = new();  // Fog of war tracking
+
     public TerrascentGame()
     {
         _graphics = new GraphicsDeviceManager(this);
@@ -368,6 +373,35 @@ public class TerrascentGame : Game
         if (_input.IsKeyPressed(Keys.F5))
         {
             RegenerateWorld();
+        }
+
+        // === DEBUG KEYS ===
+        // Toggle God Mode (F1)
+        if (_input.IsKeyPressed(Keys.F1))
+        {
+            _player.GodMode = !_player.GodMode;
+            System.Diagnostics.Debug.WriteLine($"God Mode: {(_player.GodMode ? "ON" : "OFF")}");
+        }
+
+        // Toggle Noclip (F2)
+        if (_input.IsKeyPressed(Keys.F2))
+        {
+            _player.Noclip = !_player.Noclip;
+            System.Diagnostics.Debug.WriteLine($"Noclip: {(_player.Noclip ? "ON" : "OFF")}");
+        }
+
+        // Toggle Debug Overlay (F3)
+        if (_input.IsKeyPressed(Keys.F3))
+        {
+            _showDebugOverlay = !_showDebugOverlay;
+            System.Diagnostics.Debug.WriteLine($"Debug Overlay: {(_showDebugOverlay ? "ON" : "OFF")}");
+        }
+
+        // Toggle Map (M or F4)
+        if (_input.IsKeyPressed(Keys.M) || _input.IsKeyPressed(Keys.F4))
+        {
+            _showMap = !_showMap;
+            System.Diagnostics.Debug.WriteLine($"Map: {(_showMap ? "ON" : "OFF")}");
         }
 
         // Only run gameplay updates if no UI panel is blocking
@@ -1574,6 +1608,239 @@ public class TerrascentGame : Game
             }
             System.Diagnostics.Debug.WriteLine("==================");
         }
+
+        // Draw debug overlay (F3)
+        if (_showDebugOverlay)
+        {
+            DrawDebugOverlay();
+        }
+
+        // Draw map (M or F4)
+        if (_showMap)
+        {
+            DrawMap();
+        }
+    }
+
+    /// <summary>
+    /// Draw on-screen debug overlay with current game state.
+    /// </summary>
+    private void DrawDebugOverlay()
+    {
+        int x = 10;
+        int y = 150;
+        int lineHeight = 14;
+        Color textColor = Color.White;
+        Color bgColor = new Color(0, 0, 0, 180);
+
+        // Background panel
+        int panelWidth = 280;
+        int panelHeight = 220;
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(x - 5, y - 5, panelWidth, panelHeight), bgColor);
+
+        // Title
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, "=== DEBUG (F3) ===", x, y, Color.Yellow);
+        y += lineHeight + 4;
+
+        // Debug mode status
+        string godStatus = _player.GodMode ? "ON" : "OFF";
+        string noclipStatus = _player.Noclip ? "ON" : "OFF";
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"God Mode (F1): {godStatus}", x, y, _player.GodMode ? Color.LimeGreen : textColor);
+        y += lineHeight;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Noclip (F2): {noclipStatus}", x, y, _player.Noclip ? Color.LimeGreen : textColor);
+        y += lineHeight + 4;
+
+        // Position info
+        Point tilePos = WorldCoordinates.WorldToTile(_player.Center);
+        int surfaceY = _worldGenerator.GetSurfaceHeight(tilePos.X);
+        int depth = tilePos.Y - surfaceY;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Position: {tilePos.X}, {tilePos.Y}", x, y, textColor);
+        y += lineHeight;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Depth: {depth} tiles", x, y, textColor);
+        y += lineHeight;
+
+        // Layer info
+        WorldLayer layer = _worldGenerator.Config.GetLayerAt(tilePos.Y);
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Layer: {layer}", x, y, GetLayerColor(layer));
+        y += lineHeight;
+
+        // Biome info
+        BiomeType biome = _biomeManager.CurrentBiome;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Biome: {biome.GetDisplayName()}", x, y, textColor);
+        y += lineHeight + 4;
+
+        // Player stats
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"HP: {_player.CurrentHealth}/{_player.MaxHealth}", x, y, textColor);
+        y += lineHeight;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Level: {_player.XP.Level} | XP: {_player.XP.CurrentXP}/{_player.XP.XPToNextLevel}", x, y, textColor);
+        y += lineHeight;
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Gold: {_player.Currency.Gold}", x, y, Color.Gold);
+        y += lineHeight;
+
+        // Difficulty
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Difficulty: {_difficultyManager.DifficultyTier} ({_difficultyManager.Coefficient:F2}x)", x, y, textColor);
+        y += lineHeight;
+
+        // Enemy count
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Enemies: {_enemyManager.ActiveEnemyCount}", x, y, textColor);
+    }
+
+    private Color GetLayerColor(WorldLayer layer)
+    {
+        return layer switch
+        {
+            WorldLayer.Space => Color.DarkBlue,
+            WorldLayer.Surface => Color.LimeGreen,
+            WorldLayer.Underground => Color.SandyBrown,
+            WorldLayer.Cavern => Color.Gray,
+            WorldLayer.Underworld => Color.OrangeRed,
+            _ => Color.White
+        };
+    }
+
+    /// <summary>
+    /// Draw minimap/full map overlay.
+    /// </summary>
+    private void DrawMap()
+    {
+        int screenWidth = _graphics.PreferredBackBufferWidth;
+        int screenHeight = _graphics.PreferredBackBufferHeight;
+
+        // Map dimensions
+        int mapWidth = screenWidth - 100;
+        int mapHeight = screenHeight - 100;
+        int mapX = 50;
+        int mapY = 50;
+
+        // Semi-transparent background
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(mapX - 5, mapY - 5, mapWidth + 10, mapHeight + 10), new Color(0, 0, 0, 220));
+
+        // Title
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, "WORLD MAP (M to close)", mapX, mapY - 20, Color.White);
+
+        // Calculate visible area
+        int worldWidth = _worldGenerator.Config.Width;
+        int worldHeight = _worldGenerator.Config.Height;
+
+        // Scale to fit map
+        float scaleX = (float)mapWidth / worldWidth;
+        float scaleY = (float)mapHeight / worldHeight;
+        float scale = Math.Min(scaleX, scaleY);
+
+        // Center the map
+        int actualMapWidth = (int)(worldWidth * scale);
+        int actualMapHeight = (int)(worldHeight * scale);
+        int offsetX = mapX + (mapWidth - actualMapWidth) / 2;
+        int offsetY = mapY + (mapHeight - actualMapHeight) / 2;
+
+        // Draw world terrain (simplified - sample every N tiles)
+        int sampleRate = Math.Max(1, (int)(4 / scale));  // Sample more at low zoom
+        for (int worldTileX = 0; worldTileX < worldWidth; worldTileX += sampleRate)
+        {
+            int surfaceY = _worldGenerator.GetSurfaceHeight(worldTileX);
+
+            // Draw surface line
+            int screenPixelX = offsetX + (int)(worldTileX * scale);
+
+            // Get biome color for this X position
+            BiomeType biome = _worldGenerator.GetSurfaceBiome(worldTileX);
+            Color biomeColor = GetBiomeMapColor(biome);
+
+            // Draw surface marker
+            int surfaceScreenY = offsetY + (int)(surfaceY * scale);
+            int pixelSize = Math.Max(1, (int)(sampleRate * scale));
+
+            // Draw a column from surface down (simplified terrain view)
+            for (int y = surfaceScreenY; y < offsetY + actualMapHeight && y < screenHeight; y += pixelSize)
+            {
+                int worldY = (int)((y - offsetY) / scale);
+                WorldLayer layer = _worldGenerator.Config.GetLayerAt(worldY);
+
+                Color layerColor = layer switch
+                {
+                    WorldLayer.Surface => biomeColor,
+                    WorldLayer.Underground => Color.Lerp(biomeColor, Color.Gray, 0.5f),
+                    WorldLayer.Cavern => Color.DarkGray,
+                    WorldLayer.Underworld => Color.DarkRed,
+                    _ => biomeColor
+                };
+
+                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenPixelX, y, pixelSize, pixelSize), layerColor);
+            }
+
+            // Draw sky above surface
+            for (int y = offsetY; y < surfaceScreenY; y += pixelSize)
+            {
+                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenPixelX, y, pixelSize, pixelSize), new Color(135, 206, 235, 100));
+            }
+        }
+
+        // Draw player position marker
+        Point playerTile = WorldCoordinates.WorldToTile(_player.Center);
+        int playerMapX = offsetX + (int)(playerTile.X * scale);
+        int playerMapY = offsetY + (int)(playerTile.Y * scale);
+
+        // Player marker (blinking)
+        bool blink = ((int)(DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond / 300) % 2) == 0;
+        if (blink)
+        {
+            // White border
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(playerMapX - 4, playerMapY - 4, 9, 9), Color.White);
+            // Blue center
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(playerMapX - 3, playerMapY - 3, 7, 7), Color.Blue);
+        }
+
+        // Draw spawn point marker
+        int spawnX = _worldGenerator.Config.Width / 2;
+        int spawnY = _worldGenerator.GetSurfaceHeight(spawnX);
+        int spawnMapX = offsetX + (int)(spawnX * scale);
+        int spawnMapY = offsetY + (int)(spawnY * scale);
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(spawnMapX - 2, spawnMapY - 2, 5, 5), Color.Yellow);
+
+        // Draw biome labels
+        DrawBiomeLabels(offsetX, offsetY, scale, actualMapWidth);
+
+        // Draw coordinates at bottom
+        string coords = $"Player: {playerTile.X}, {playerTile.Y} | World: {worldWidth} x {worldHeight}";
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, coords, mapX, mapY + mapHeight + 10, Color.White);
+    }
+
+    private void DrawBiomeLabels(int offsetX, int offsetY, float scale, int mapWidth)
+    {
+        // Sample biome zones and draw labels
+        int lastBiomeX = 0;
+        BiomeType lastBiome = BiomeType.Ocean;
+
+        for (int x = 0; x < _worldGenerator.Config.Width; x += 100)
+        {
+            BiomeType biome = _worldGenerator.GetSurfaceBiome(x);
+            if (biome != lastBiome)
+            {
+                // Draw label at biome boundary
+                int labelX = offsetX + (int)(x * scale);
+                int labelY = offsetY - 15;
+                InventoryUI.DrawText(_spriteBatch, _pixelTexture, biome.GetDisplayName(), labelX, labelY, GetBiomeMapColor(biome));
+                lastBiome = biome;
+                lastBiomeX = x;
+            }
+        }
+    }
+
+    private Color GetBiomeMapColor(BiomeType biome)
+    {
+        return biome switch
+        {
+            BiomeType.Forest => new Color(34, 139, 34),
+            BiomeType.Desert => new Color(238, 214, 175),
+            BiomeType.Snow => new Color(200, 220, 255),
+            BiomeType.Jungle => new Color(80, 150, 60),
+            BiomeType.Ocean => new Color(65, 105, 225),
+            BiomeType.Corruption => new Color(100, 80, 150),
+            BiomeType.Crimson => new Color(180, 80, 80),
+            BiomeType.Hallow => new Color(200, 180, 255),
+            BiomeType.Mushroom => new Color(93, 127, 255),
+            _ => Color.Green
+        };
     }
 
     private void DrawRectangle(Vector2 position, int width, int height, Color color)
