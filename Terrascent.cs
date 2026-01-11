@@ -403,7 +403,7 @@ public class TerrascentGame : Game
 
         _worldSeed = Random.Shared.Next();
 
-        _worldGenerator = new WorldGenerator(_worldSeed);
+        _worldGenerator = new WorldGenerator(_worldSeed, WorldSize.Medium);
         _chunkManager.Clear();
         _chunkManager.Generator = _worldGenerator;
 
@@ -434,8 +434,9 @@ public class TerrascentGame : Game
         _dropManager.Clear();
         _bossManager.Clear();
 
-        // Recreate biome manager with new seed
+        // Recreate biome manager with new seed and world config
         _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
+        _biomeManager.SetWorldConfig(_worldGenerator.Config);
         _enemyManager.SetBiomeManager(_biomeManager);
 
         // Recreate biome UI with new manager

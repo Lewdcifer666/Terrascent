@@ -1,37 +1,37 @@
 ﻿using Microsoft.Xna.Framework;
+using Terrascent.World;
 
 namespace Terrascent.World.Biomes;
 
 /// <summary>
 /// Manages biome detection, spreading, and environmental effects.
+/// Uses Terraria-accurate detection with 169x124 tile rectangle (84 left/right, 62 above, 61 below).
 /// </summary>
 public class BiomeManager
 {
     private readonly ChunkManager _chunks;
     private readonly Random _random;
+    private WorldConfig? _worldConfig;
 
     // Spreading settings
-    private const float SPREAD_CHECK_INTERVAL = 1.0f;  // Check every 1 second
-    private const int SPREAD_ATTEMPTS_PER_CHUNK = 5;   // Spread attempts per loaded chunk
+    private const float SPREAD_CHECK_INTERVAL = 1.0f;
+    private const int SPREAD_ATTEMPTS_PER_CHUNK = 5;
     private float _spreadTimer;
 
     // Hardmode state
     private bool _isHardmode;
+    private bool _postPlantera;  // Spread rate reduced by 50% after Plantera
 
-    // Detection cache (for performance)
+    // Detection cache
     private BiomeType _cachedBiome = BiomeType.Forest;
     private Point _cachedPosition;
-    private bool _cacheValid = false;  // Use flag instead of MinValue sentinel
-    private const int CACHE_RADIUS = 5;  // Recalculate if player moves this many tiles
+    private bool _cacheValid = false;
+    private const int CACHE_RADIUS = 5;
 
-    /// <summary>
-    /// Event fired when the local biome changes.
-    /// </summary>
+    /// <summary>Event fired when the local biome changes.</summary>
     public event Action<BiomeType, BiomeType>? OnBiomeChanged;
 
-    /// <summary>
-    /// Event fired when a tile is converted by spreading.
-    /// </summary>
+    /// <summary>Event fired when a tile is converted by spreading.</summary>
     public event Action<Point, TileType, TileType>? OnTileConverted;
 
     public BiomeManager(ChunkManager chunks, int seed)
@@ -41,12 +41,15 @@ public class BiomeManager
         _spreadTimer = SPREAD_CHECK_INTERVAL;
     }
 
-    /// <summary>
-    /// Update biome spreading and effects.
-    /// </summary>
+    /// <summary>Set the world configuration for layer-based detection.</summary>
+    public void SetWorldConfig(WorldConfig config)
+    {
+        _worldConfig = config;
+    }
+
+    /// <summary>Update biome spreading and effects.</summary>
     public void Update(float deltaTime, Point playerTilePos)
     {
-        // Update spreading timer
         _spreadTimer -= deltaTime;
         if (_spreadTimer <= 0)
         {
@@ -55,18 +58,21 @@ public class BiomeManager
         }
     }
 
-    /// <summary>
-    /// Enable hardmode, allowing Hallow biome to spread.
-    /// </summary>
+    /// <summary>Enable hardmode, doubling spread rate.</summary>
     public void EnableHardmode()
     {
         _isHardmode = true;
-        System.Diagnostics.Debug.WriteLine("HARDMODE ENABLED - Hallow biome can now spread!");
+        System.Diagnostics.Debug.WriteLine("HARDMODE ENABLED - Hallow biome can now spread! Evil biomes spread faster.");
     }
 
-    /// <summary>
-    /// Detect the current biome at a position.
-    /// </summary>
+    /// <summary>Mark Plantera as defeated, reducing spread rate by 50%.</summary>
+    public void SetPostPlantera()
+    {
+        _postPlantera = true;
+        System.Diagnostics.Debug.WriteLine("POST-PLANTERA - Biome spread rate reduced by 50%.");
+    }
+
+    /// <summary>Detect the current biome at a position.</summary>
     public BiomeType DetectBiome(Point tilePosition)
     {
         // Check cache first
@@ -82,7 +88,6 @@ public class BiomeManager
 
         BiomeType newBiome = CalculateBiome(tilePosition);
 
-        // Fire event if biome changed
         if (newBiome != _cachedBiome || !_cacheValid)
         {
             var oldBiome = _cachedBiome;
@@ -104,41 +109,66 @@ public class BiomeManager
     }
 
     /// <summary>
-    /// Calculate the biome at a position by counting nearby tiles.
+    /// Calculate the biome at a position using Terraria-accurate detection.
+    /// Uses 169x124 tile rectangle (84 left/right, 62 above, 61 below).
     /// </summary>
     private BiomeType CalculateBiome(Point center)
     {
-        int depth = center.Y;
+        // Get current layer
+        WorldLayer currentLayer = WorldLayer.Surface;
+        if (_worldConfig != null)
+        {
+            currentLayer = _worldConfig.GetLayerAt(center.Y);
+        }
+        else
+        {
+            currentLayer = GetFallbackLayer(center.Y);
+        }
 
-        // Check special depth-based biomes first
-        if (depth < -100)
+        // Check position-based biomes first
+
+        // Space biome (position-based)
+        if (currentLayer == WorldLayer.Space)
         {
             return BiomeType.Space;
         }
 
-        if (depth > 400)
+        // Underworld biome (position-based + ash/hellstone tiles)
+        if (currentLayer == WorldLayer.Underworld)
         {
-            // Check for underworld tiles
-            int ashCount = CountTilesInRadius(center, 42, TileType.Ash, TileType.Hellstone);
-            if (ashCount >= 50)
+            int underworldTiles = CountTilesInDetectionArea(center, TileType.Ash, TileType.Hellstone, TileType.Obsidian);
+            if (underworldTiles >= BiomeTileThresholds.Underworld)
                 return BiomeType.Underworld;
         }
 
-        // Count tiles for each biome
+        // Ocean biome (position-based)
+        if (_worldConfig != null && _worldConfig.IsOceanArea(center.X) &&
+            (currentLayer == WorldLayer.Surface || currentLayer == WorldLayer.Underground))
+        {
+            return BiomeType.Ocean;
+        }
+
+        // Count tiles for tile-based biomes
+        // Priority order: Meteorite > Dungeon > Evil > Hallow > Mushroom > Snow > Jungle > Desert > Forest
+
         Dictionary<BiomeType, int> biomeCounts = new();
 
         foreach (var biomeData in BiomeRegistry.GetByPriority())
         {
-            // Skip hardmode biomes if not in hardmode
             if (biomeData.RequiresHardmode && !_isHardmode)
                 continue;
 
-            // Check depth requirements
-            if (depth < biomeData.MinDepth || depth > biomeData.MaxDepth)
+            if (biomeData.IsPositionBased)
                 continue;
 
-            // Count associated tiles
-            int count = CountTilesInRadius(center, biomeData.DetectionRadius, biomeData.AssociatedTiles);
+            if (!biomeData.ValidLayers.Contains(currentLayer))
+                continue;
+
+            int count = 0;
+            if (biomeData.AssociatedTiles.Length > 0)
+            {
+                count = CountTilesInDetectionArea(center, biomeData.AssociatedTiles);
+            }
 
             if (count >= biomeData.MinTileCount)
             {
@@ -146,28 +176,59 @@ public class BiomeManager
             }
         }
 
-        // Return highest priority biome that meets threshold
-        if (biomeCounts.Count > 0)
+        // Handle Hallow vs Evil biome priority (they counter each other)
+        if (biomeCounts.ContainsKey(BiomeType.Hallow) &&
+            (biomeCounts.ContainsKey(BiomeType.Corruption) || biomeCounts.ContainsKey(BiomeType.Crimson)))
         {
-            // Get highest priority biome (already sorted by priority)
-            foreach (var biomeData in BiomeRegistry.GetByPriority())
+            int hallowCount = biomeCounts.GetValueOrDefault(BiomeType.Hallow, 0);
+            int corruptCount = biomeCounts.GetValueOrDefault(BiomeType.Corruption, 0);
+            int crimsonCount = biomeCounts.GetValueOrDefault(BiomeType.Crimson, 0);
+            int evilCount = Math.Max(corruptCount, crimsonCount);
+
+            if (hallowCount > evilCount)
             {
-                if (biomeCounts.ContainsKey(biomeData.Type))
-                    return biomeData.Type;
+                biomeCounts.Remove(BiomeType.Corruption);
+                biomeCounts.Remove(BiomeType.Crimson);
+            }
+            else
+            {
+                biomeCounts.Remove(BiomeType.Hallow);
             }
         }
 
-        // Default biomes based on depth
-        if (depth >= 50)
-            return BiomeType.Underground;
+        // Return highest priority biome that meets threshold
+        if (biomeCounts.Count > 0)
+        {
+            foreach (var biomeData in BiomeRegistry.GetByPriority())
+            {
+                if (biomeCounts.ContainsKey(biomeData.Type))
+                {
+                    // Return underground variant if in underground/cavern layer
+                    if (currentLayer == WorldLayer.Underground || currentLayer == WorldLayer.Cavern)
+                    {
+                        return BiomeRegistry.GetUndergroundVariant(biomeData.Type);
+                    }
+                    return biomeData.Type;
+                }
+            }
+        }
 
-        return BiomeType.Forest;
+        // Default biomes based on layer
+        return currentLayer switch
+        {
+            WorldLayer.Space => BiomeType.Space,
+            WorldLayer.Surface => BiomeType.Forest,
+            WorldLayer.Underground => BiomeType.Underground,
+            WorldLayer.Cavern => BiomeType.Underground,
+            WorldLayer.Underworld => BiomeType.Underworld,
+            _ => BiomeType.Forest
+        };
     }
 
     /// <summary>
-    /// Count specific tile types within a radius.
+    /// Count tiles in Terraria's detection area (169x124: 84 left/right, 62 above, 61 below).
     /// </summary>
-    private int CountTilesInRadius(Point center, int radius, params TileType[] tileTypes)
+    private int CountTilesInDetectionArea(Point center, params TileType[] tileTypes)
     {
         if (tileTypes == null || tileTypes.Length == 0)
             return 0;
@@ -175,9 +236,11 @@ public class BiomeManager
         HashSet<TileType> targetTypes = new(tileTypes);
         int count = 0;
 
-        for (int dy = -radius; dy <= radius; dy++)
+        // Terraria detection area: 84 tiles left, 84 tiles right (169 wide)
+        //                          62 tiles above, 61 tiles below (124 tall)
+        for (int dy = -WorldConfig.BIOME_DETECT_ABOVE; dy <= WorldConfig.BIOME_DETECT_BELOW; dy++)
         {
-            for (int dx = -radius; dx <= radius; dx++)
+            for (int dx = -WorldConfig.BIOME_DETECT_RADIUS_X; dx <= WorldConfig.BIOME_DETECT_RADIUS_X; dx++)
             {
                 int x = center.X + dx;
                 int y = center.Y + dy;
@@ -193,20 +256,37 @@ public class BiomeManager
         return count;
     }
 
-    /// <summary>
-    /// Get the biome at a specific tile position (uncached, for spawning).
-    /// </summary>
+    /// <summary>Fallback layer detection when WorldConfig is not set.</summary>
+    private WorldLayer GetFallbackLayer(int worldY)
+    {
+        if (worldY < 100)
+            return WorldLayer.Space;
+        if (worldY < 150)
+            return WorldLayer.Surface;
+        if (worldY < 300)
+            return WorldLayer.Underground;
+        if (worldY < 500)
+            return WorldLayer.Cavern;
+        return WorldLayer.Underworld;
+    }
+
+    /// <summary>Get the biome at a specific tile position (uncached, for spawning).</summary>
     public BiomeType GetBiomeAt(Point tilePosition)
     {
         return CalculateBiome(tilePosition);
     }
 
-    /// <summary>
-    /// Process biome spreading for loaded chunks.
-    /// </summary>
+    /// <summary>Get the current world layer at a position.</summary>
+    public WorldLayer GetLayerAt(int worldY)
+    {
+        if (_worldConfig != null)
+            return _worldConfig.GetLayerAt(worldY);
+        return GetFallbackLayer(worldY);
+    }
+
+    /// <summary>Process biome spreading for loaded chunks.</summary>
     private void ProcessSpreading(Point playerTilePos)
     {
-        // Get loaded chunks near player
         var loadedChunks = _chunks.GetLoadedChunks();
         if (loadedChunks == null || !loadedChunks.Any())
             return;
@@ -217,17 +297,21 @@ public class BiomeManager
         }
     }
 
-    /// <summary>
-    /// Process spreading for a single chunk.
-    /// </summary>
+    /// <summary>Process spreading for a single chunk.</summary>
     private void ProcessChunkSpreading(Chunk chunk)
     {
         int chunkWorldX = chunk.Position.X * Chunk.SIZE;
         int chunkWorldY = chunk.Position.Y * Chunk.SIZE;
 
-        for (int attempt = 0; attempt < SPREAD_ATTEMPTS_PER_CHUNK; attempt++)
+        // Spread rate multiplier based on game state
+        float spreadMultiplier = 1.0f;
+        if (_isHardmode) spreadMultiplier = 2.0f;
+        if (_postPlantera) spreadMultiplier *= 0.5f;
+
+        int attempts = (int)(SPREAD_ATTEMPTS_PER_CHUNK * spreadMultiplier);
+
+        for (int attempt = 0; attempt < attempts; attempt++)
         {
-            // Pick random tile in chunk
             int localX = _random.Next(Chunk.SIZE);
             int localY = _random.Next(Chunk.SIZE);
             int worldX = chunkWorldX + localX;
@@ -237,17 +321,13 @@ public class BiomeManager
             if (tile.Type == TileType.Air)
                 continue;
 
-            // Check if this tile belongs to a spreading biome
             TrySpreadFrom(worldX, worldY, tile.Type);
         }
     }
 
-    /// <summary>
-    /// Attempt to spread from a source tile.
-    /// </summary>
+    /// <summary>Attempt to spread from a source tile.</summary>
     private void TrySpreadFrom(int sourceX, int sourceY, TileType sourceTile)
     {
-        // Find which spreading biome this tile belongs to
         BiomeData? sourceBiome = null;
         foreach (var biome in BiomeRegistry.GetSpreadingBiomes())
         {
@@ -264,11 +344,15 @@ public class BiomeManager
         if (sourceBiome == null)
             return;
 
-        // Random chance check
-        if (_random.NextSingle() > sourceBiome.SpreadChance)
+        // Random chance check (affected by spread rate)
+        float effectiveChance = sourceBiome.SpreadChance;
+        if (_isHardmode) effectiveChance *= 2.0f;
+        if (_postPlantera) effectiveChance *= 0.5f;
+
+        if (_random.NextSingle() > effectiveChance)
             return;
 
-        // Pick random adjacent tile within spread radius
+        // Pick random adjacent tile within spread radius (Terraria uses 3 tiles)
         int radius = sourceBiome.SpreadRadius;
         int dx = _random.Next(-radius, radius + 1);
         int dy = _random.Next(-radius, radius + 1);
@@ -281,69 +365,32 @@ public class BiomeManager
         if (targetTile.Type == TileType.Air)
             return;
 
-        // Check if we can convert this tile
         if (sourceBiome.SpreadConversions.TryGetValue(targetTile.Type, out var newType))
         {
-            // Don't convert to the same type
             if (newType == targetTile.Type)
                 return;
 
-            // Convert the tile
             _chunks.SetTileAt(targetX, targetY, new Tile(newType));
             OnTileConverted?.Invoke(new Point(targetX, targetY), targetTile.Type, newType);
         }
     }
 
-    /// <summary>
-    /// Get spawn rate multiplier for current biome.
-    /// </summary>
-    public float GetSpawnRateMultiplier(BiomeType biome)
-    {
-        return BiomeRegistry.Get(biome).SpawnRateMultiplier;
-    }
+    // === Biome Properties ===
 
-    /// <summary>
-    /// Get gold drop multiplier for current biome.
-    /// </summary>
-    public float GetGoldMultiplier(BiomeType biome)
-    {
-        return BiomeRegistry.Get(biome).GoldMultiplier;
-    }
+    public float GetSpawnRateMultiplier(BiomeType biome) => BiomeRegistry.Get(biome).SpawnRateMultiplier;
+    public float GetGoldMultiplier(BiomeType biome) => BiomeRegistry.Get(biome).GoldMultiplier;
+    public float GetXPMultiplier(BiomeType biome) => BiomeRegistry.Get(biome).XPMultiplier;
+    public float GetRareDropMultiplier(BiomeType biome) => BiomeRegistry.Get(biome).RareDropMultiplier;
+    public int GetDangerLevel(BiomeType biome) => BiomeRegistry.Get(biome).DangerLevel;
 
-    /// <summary>
-    /// Get XP multiplier for current biome.
-    /// </summary>
-    public float GetXPMultiplier(BiomeType biome)
-    {
-        return BiomeRegistry.Get(biome).XPMultiplier;
-    }
-
-    /// <summary>
-    /// Get rare drop multiplier for current biome.
-    /// </summary>
-    public float GetRareDropMultiplier(BiomeType biome)
-    {
-        return BiomeRegistry.Get(biome).RareDropMultiplier;
-    }
-
-    /// <summary>
-    /// Get danger level for current biome.
-    /// </summary>
-    public int GetDangerLevel(BiomeType biome)
-    {
-        return BiomeRegistry.Get(biome).DangerLevel;
-    }
-
-    /// <summary>
-    /// Get tile counts for debugging.
-    /// </summary>
-    public Dictionary<TileType, int> GetBiomeTileCounts(Point center, int radius = 42)
+    /// <summary>Get tile counts for debugging.</summary>
+    public Dictionary<TileType, int> GetBiomeTileCounts(Point center)
     {
         Dictionary<TileType, int> counts = new();
 
-        for (int dy = -radius; dy <= radius; dy++)
+        for (int dy = -WorldConfig.BIOME_DETECT_ABOVE; dy <= WorldConfig.BIOME_DETECT_BELOW; dy++)
         {
-            for (int dx = -radius; dx <= radius; dx++)
+            for (int dx = -WorldConfig.BIOME_DETECT_RADIUS_X; dx <= WorldConfig.BIOME_DETECT_RADIUS_X; dx++)
             {
                 int x = center.X + dx;
                 int y = center.Y + dy;
@@ -360,9 +407,7 @@ public class BiomeManager
         return counts;
     }
 
-    /// <summary>
-    /// Purify an area (convert evil tiles back to normal).
-    /// </summary>
+    /// <summary>Purify an area (convert evil/hallow tiles back to normal).</summary>
     public int PurifyArea(Point center, int radius)
     {
         int converted = 0;
@@ -401,9 +446,7 @@ public class BiomeManager
         return converted;
     }
 
-    /// <summary>
-    /// Corrupt an area (spread corruption).
-    /// </summary>
+    /// <summary>Corrupt an area (spread corruption).</summary>
     public int CorruptArea(Point center, int radius)
     {
         int converted = 0;
@@ -431,9 +474,7 @@ public class BiomeManager
         return converted;
     }
 
-    /// <summary>
-    /// Hallow an area (spread hallow).
-    /// </summary>
+    /// <summary>Hallow an area (spread hallow).</summary>
     public int HallowArea(Point center, int radius)
     {
         if (!_isHardmode)
@@ -467,13 +508,10 @@ public class BiomeManager
         return converted;
     }
 
-    /// <summary>
-    /// Check if hardmode is enabled.
-    /// </summary>
-    public bool IsHardmode => _isHardmode;
+    // === State Properties ===
 
-    /// <summary>
-    /// Get the current cached biome.
-    /// </summary>
+    public bool IsHardmode => _isHardmode;
+    public bool IsPostPlantera => _postPlantera;
     public BiomeType CurrentBiome => _cachedBiome;
+    public WorldConfig? WorldConfig => _worldConfig;
 }
