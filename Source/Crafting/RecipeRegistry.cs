@@ -731,6 +731,102 @@ public static class RecipeRegistry
             .Named("Bulk Lesser Healing")
             .InCategory(RecipeCategory.Potions)
             .Build());
+
+        // === ADDITIONAL POTION RECIPES ===
+
+        // Greater healing (using honeycomb)
+        Register(Create(ItemType.HealingPotion)
+            .Amount(2)
+            .Requires(ItemType.LesserHealingPotion, 3)
+            .Requires(ItemType.Honeycomb, 1)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .AfterBoss(BossType.QueenBee)
+            .Named("Honey Healing")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Regeneration potion placeholder
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(3)
+            .Requires(ItemType.Gel, 8)
+            .Requires(ItemType.Leaves, 5)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Herbal Tonic")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Speed potion placeholder
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 6)
+            .Requires(ItemType.SilverBar, 1)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Swiftness Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Defense potion placeholder
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 6)
+            .Requires(ItemType.IronBar, 2)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Ironskin Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Night owl potion
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 4)
+            .Requires(ItemType.Lens, 2)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Night Owl Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Mining potion
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 5)
+            .Requires(ItemType.CopperOre, 3)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Mining Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Boss-drop enhanced potions
+        Register(Create(ItemType.HealingPotion)
+            .Amount(3)
+            .Requires(ItemType.LesserHealingPotion, 5)
+            .Requires(ItemType.RoyalGel, 1)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .AfterBoss(BossType.KingSlime)
+            .Named("Royal Healing")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Wrath potion placeholder
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 5)
+            .Requires(ItemType.ShadowScale, 2)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .AfterBoss(BossType.EyeOfTerror)
+            .Named("Wrath Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
+
+        // Rage potion placeholder
+        Register(Create(ItemType.LesserHealingPotion)
+            .Amount(2)
+            .Requires(ItemType.Gel, 5)
+            .Requires(ItemType.TissueSample, 2)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .AfterBoss(BossType.BrainOfDepths)
+            .Named("Rage Potion")
+            .InCategory(RecipeCategory.Potions)
+            .Build());
     }
 
     #endregion
@@ -812,6 +908,92 @@ public static class RecipeRegistry
             .Amount(2)
             .Requires(ItemType.Ice, 1)
             .AtStation(CraftingStationType.IceMachine)
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // === ADDITIONAL BLOCK RECIPES ===
+        // Bulk stone bricks
+        Register(Create(ItemType.StoneBrick)
+            .Amount(10)
+            .Requires(ItemType.Stone, 20)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Mass Stone Bricks")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Sand from stone (crushing)
+        Register(Create(ItemType.Sand)
+            .Amount(2)
+            .Requires(ItemType.Stone, 3)
+            .AtStation(CraftingStationType.HeavyWorkbench)
+            .Named("Crush Stone to Sand")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Clay from dirt + sand
+        Register(Create(ItemType.Clay)
+            .Amount(2)
+            .Requires(ItemType.Dirt, 2)
+            .Requires(ItemType.Sand, 1)
+            .AlsoRequires(CraftingStationType.Water)
+            .AtStation(CraftingStationType.Workbench)
+            .Named("Mix Clay")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Platform variations
+        Register(Create(ItemType.WoodPlatform)
+            .Amount(10)
+            .Requires(ItemType.Wood, 4)
+            .AtStation(CraftingStationType.Sawmill)
+            .Named("Mass Platforms")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Stone platform
+        Register(Create(ItemType.Stone)
+            .Amount(3)
+            .Requires(ItemType.Stone, 5)
+            .AtStation(CraftingStationType.Workbench)
+            .Named("Stone Platform (3)")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Dirt grass conversion (with leaves)
+        Register(Create(ItemType.Grass)
+            .Amount(1)
+            .Requires(ItemType.Dirt, 1)
+            .Requires(ItemType.Leaves, 3)
+            .AtStation(CraftingStationType.Workbench)
+            .Named("Grass Block")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Leaves compost
+        Register(Create(ItemType.Dirt)
+            .Amount(1)
+            .Requires(ItemType.Leaves, 10)
+            .AtStation(CraftingStationType.Workbench)
+            .Named("Compost Leaves")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Ice variations
+        Register(Create(ItemType.Ice)
+            .Amount(3)
+            .Requires(ItemType.Ice, 1)
+            .AlsoRequires(CraftingStationType.Water)
+            .AtStation(CraftingStationType.IceMachine)
+            .Named("Expand Ice")
+            .InCategory(RecipeCategory.Blocks)
+            .Build());
+
+        // Snow to ice direct
+        Register(Create(ItemType.Ice)
+            .Amount(1)
+            .Requires(ItemType.Snow, 4)
+            .AtStation(CraftingStationType.IceMachine)
+            .Named("Pack Snow to Ice")
             .InCategory(RecipeCategory.Blocks)
             .Build());
     }
@@ -1182,6 +1364,158 @@ public static class RecipeRegistry
             .Requires(ItemType.KingSlimeTrophy, 1)
             .AtStation(CraftingStationType.AlchemyTable)
             .Named("Dissolve Slime Trophy")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // === ADDITIONAL MISC RECIPES ===
+        // Wood conversions
+        Register(Create(ItemType.Torch)
+            .Amount(5)
+            .Requires(ItemType.Wood, 2)
+            .Requires(ItemType.Gel, 2)
+            .Named("Quick Torches")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Stone conversions
+        Register(Create(ItemType.StoneBrick)
+            .Amount(5)
+            .Requires(ItemType.Stone, 10)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Bulk Stone Bricks")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Sand to glass alternative
+        Register(Create(ItemType.Lens)
+            .Amount(1)
+            .Requires(ItemType.Sand, 10)
+            .AtStation(CraftingStationType.GlassKiln)
+            .Named("Sand Lens")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Weapon recycling
+        Register(Create(ItemType.CopperBar)
+            .Amount(3)
+            .Requires(ItemType.CopperSword, 1)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Recycle Copper Sword")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.SilverBar)
+            .Amount(3)
+            .Requires(ItemType.SilverSword, 1)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Recycle Silver Sword")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.GoldBar)
+            .Amount(3)
+            .Requires(ItemType.GoldSword, 1)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Recycle Gold Sword")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Tool recycling
+        Register(Create(ItemType.SilverBar)
+            .Amount(4)
+            .Requires(ItemType.SilverBar, 12)  // Placeholder for silver pickaxe
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Recycle Silver Tools")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Material combining
+        Register(Create(ItemType.Gel)
+            .Amount(10)
+            .Requires(ItemType.Gel, 5)
+            .Requires(ItemType.Torch, 2)
+            .AtStation(CraftingStationType.AlchemyTable)
+            .Named("Ignite Gel")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Ore upgrading
+        Register(Create(ItemType.GoldOre)
+            .Amount(1)
+            .Requires(ItemType.SilverOre, 4)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Transmute to Gold")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.SilverOre)
+            .Amount(1)
+            .Requires(ItemType.IronOre, 4)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Transmute to Silver")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.IronOre)
+            .Amount(1)
+            .Requires(ItemType.CopperOre, 4)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Transmute to Iron")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Boss material conversions
+        Register(Create(ItemType.ShadowScale)
+            .Amount(1)
+            .Requires(ItemType.TissueSample, 2)
+            .AtStation(CraftingStationType.DemonAltar)
+            .Named("Convert Tissue to Scale")
+            .AfterBoss(BossType.BrainOfDepths)
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.TissueSample)
+            .Amount(1)
+            .Requires(ItemType.ShadowScale, 2)
+            .AtStation(CraftingStationType.DemonAltar)
+            .Named("Convert Scale to Tissue")
+            .AfterBoss(BossType.EyeOfTerror)
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Bee material conversions
+        Register(Create(ItemType.Honeycomb)
+            .Amount(2)
+            .Requires(ItemType.BeeWax, 8)
+            .AtStation(CraftingStationType.HoneyDispenser)
+            .Named("Shape Honeycomb")
+            .AfterBoss(BossType.QueenBee)
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        // Block conversions
+        Register(Create(ItemType.Mud)
+            .Amount(5)
+            .Requires(ItemType.Dirt, 5)
+            .Requires(ItemType.Gel, 3)
+            .AtStation(CraftingStationType.Workbench)
+            .Named("Wet Dirt")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.Clay)
+            .Amount(3)
+            .Requires(ItemType.Mud, 5)
+            .AtStation(CraftingStationType.Furnace)
+            .Named("Bake Clay")
+            .InCategory(RecipeCategory.Misc)
+            .Build());
+
+        Register(Create(ItemType.Ice)
+            .Amount(5)
+            .Requires(ItemType.Snow, 8)
+            .AtStation(CraftingStationType.IceMachine)
+            .Named("Compress Snow")
             .InCategory(RecipeCategory.Misc)
             .Build());
     }

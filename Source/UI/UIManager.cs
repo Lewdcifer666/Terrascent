@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terrascent.Core;
+using Terrascent.Crafting;
 using Terrascent.Entities;
 using Terrascent.Entities.Bosses;
 using Terrascent.Items;
@@ -21,16 +22,20 @@ public class UIManager
     public XPBarUI XPBarUI { get; private set; } = null!;
     public LevelUpUI LevelUpUI { get; private set; } = null!;
     public BossHealthBarUI BossHealthBarUI { get; private set; } = null!;
+    public CraftingUI? CraftingUI { get; private set; }
+
+    // Crafting manager reference
+    public CraftingManager? _craftingManager;
 
     // Level-up system reference
     private LevelUpManager? _levelUpManager;
 
     // Boss manager reference
-    private BossManager? _bossManager;
+    public BossManager? _bossManager;
 
     // Held item (being dragged)
     private ItemStack _heldItem = ItemStack.Empty;
-    private int _heldFromSlot = -1;
+    public int _heldFromSlot = -1;
 
     /// <summary>
     /// Is the inventory currently open?
@@ -93,6 +98,15 @@ public class UIManager
     }
 
     /// <summary>
+    /// Set the crafting manager reference and create UI.
+    /// </summary>
+    public void SetCraftingManager(CraftingManager craftingManager, int screenWidth, int screenHeight)
+    {
+        _craftingManager = craftingManager;
+        CraftingUI = new CraftingUI(craftingManager, _player.Inventory, screenWidth, screenHeight);
+    }
+
+    /// <summary>
     /// Handle screen resize.
     /// </summary>
     public void OnScreenResize(int screenWidth, int screenHeight)
@@ -100,6 +114,7 @@ public class UIManager
         XPBarUI?.OnScreenResize(screenWidth, screenHeight);
         LevelUpUI?.OnScreenResize(screenWidth, screenHeight);
         BossHealthBarUI?.OnScreenResize(screenWidth, screenHeight);
+        CraftingUI?.OnScreenResize(screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -137,6 +152,9 @@ public class UIManager
         if (IsInventoryOpen)
         {
             InventoryUI.Update(_input, deltaTime);
+
+            // Update crafting UI when inventory is open
+            CraftingUI?.Update(_input, deltaTime);
         }
 
         // Always update XP bar (for smooth animations)
@@ -393,6 +411,10 @@ public class UIManager
 
         if (IsInventoryOpen)
         {
+            // Draw crafting UI first (on left side)
+            CraftingUI?.Draw(spriteBatch, pixelTexture, mousePosition);
+
+            // Draw inventory UI (centered/right side)
             InventoryUI.Draw(spriteBatch, pixelTexture, mousePosition);
 
             // Draw held item at mouse cursor

@@ -30,7 +30,7 @@ public class Boss : Entity
     // === PHASE SYSTEM ===
     public BossPhase CurrentPhase { get; private set; } = BossPhase.Phase1;
     private BossPhaseData _currentPhaseData;
-    private BossPhase _previousPhase = BossPhase.Phase1;
+    public BossPhase _previousPhase = BossPhase.Phase1;
 
     // === ENRAGE SYSTEM ===
     private float _fightTimer;
@@ -47,7 +47,7 @@ public class Boss : Entity
     private float _attackTimer;
 
     private Entity? _target;
-    private Vector2 _targetPosition;
+    public Vector2 _targetPosition;
     private float _dashVelocityX;
     private float _dashVelocityY;
     private bool _isDashing;
@@ -56,9 +56,9 @@ public class Boss : Entity
     // === MOVEMENT SPECIFIC ===
     private float _hoverTimer;
     private float _bounceTimer;
-    private float _teleportCooldown;
-    private Vector2 _patternOffset;
-    private int _patternIndex;
+    public float _teleportCooldown;
+    public Vector2 _patternOffset;
+    public int _patternIndex;
 
     // === MINION SPAWNING ===
     private float _minionSpawnTimer;

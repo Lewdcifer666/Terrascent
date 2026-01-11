@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Terrascent.Combat;
 using Terrascent.Core;
+using Terrascent.Crafting;
 using Terrascent.Economy;
 using Terrascent.Entities;
 using Terrascent.Entities.Bosses;
@@ -52,6 +53,9 @@ public class TerrascentGame : Game
 
     // Boss System
     private BossManager _bossManager = null!;
+
+    // Crafting System
+    private CraftingManager _craftingManager = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -152,6 +156,9 @@ public class TerrascentGame : Game
 
         // Create boss system
         _bossManager = new BossManager(_difficultyManager, _dropManager, _enemyManager, _worldSeed);
+
+        // Create crafting system
+        _craftingManager = new CraftingManager(_player, _bossManager);
 
         // Connect XP system to drop manager
         _dropManager.SetXPSystem(_player.XP);
@@ -306,6 +313,13 @@ public class TerrascentGame : Game
             _graphics.PreferredBackBufferWidth,
             _graphics.PreferredBackBufferHeight
         );
+
+        // Wire up crafting UI with crafting manager
+        _uiManager.SetCraftingManager(
+            _craftingManager,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
     }
 
     protected override void Update(GameTime gameTime)
@@ -429,6 +443,9 @@ public class TerrascentGame : Game
 
         // Update bosses
         _bossManager.Update(dt, _player, _chunkManager);
+
+        // Update crafting (station detection)
+        _craftingManager.Update(dt, _chunkManager);
 
         // Debug: Spawn test enemy (F7)
         if (_input.IsKeyPressed(Keys.F7))
