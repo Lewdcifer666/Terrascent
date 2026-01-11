@@ -2,6 +2,7 @@
 using Terrascent.Economy;
 using Terrascent.Entities.Drops;
 using Terrascent.World;
+using Terrascent.World.Biomes;
 
 namespace Terrascent.Entities.Enemies;
 
@@ -14,6 +15,9 @@ public class EnemyManager
     private readonly DifficultyManager _difficulty;
     private readonly DropManager _dropManager;
     private readonly Random _random;
+
+    // Biome manager reference (set after construction)
+    private BiomeManager? _biomeManager;
 
     // Spawn settings
     private const int MAX_ENEMIES = 50;
@@ -40,6 +44,14 @@ public class EnemyManager
         _difficulty = difficulty;
         _dropManager = dropManager;
         _random = new Random(seed);
+    }
+
+    /// <summary>
+    /// Set the biome manager reference for biome-aware spawning.
+    /// </summary>
+    public void SetBiomeManager(BiomeManager biomeManager)
+    {
+        _biomeManager = biomeManager;
     }
 
     /// <summary>
@@ -133,29 +145,58 @@ public class EnemyManager
         float difficultyBonus = (_difficulty.Coefficient - 1f) * 0.1f;
         float spawnChance = baseChance + difficultyBonus;
 
-        if (_random.NextSingle() > spawnChance) return;
-
         // Find a valid spawn position
         Vector2? spawnPos = FindSpawnPosition(player, chunks);
         if (!spawnPos.HasValue) return;
 
         // Determine spawn depth (Y position in tiles)
-        int depth = (int)(spawnPos.Value.Y / WorldCoordinates.TILE_SIZE);
+        Point spawnTile = WorldCoordinates.WorldToTile(spawnPos.Value);
+        int depth = spawnTile.Y;
         bool isSurface = depth < 50;  // Rough surface threshold
 
-        // Get valid enemies for this location
-        var validEnemies = EnemyRegistry.GetSpawnableAt(depth, isSurface).ToList();
+        // Get biome at spawn location for biome-aware spawning
+        BiomeType biome = BiomeType.Forest;
+        bool isHardmode = false;
+        float spawnRateMultiplier = 1f;
+
+        if (_biomeManager != null)
+        {
+            biome = _biomeManager.GetBiomeAt(spawnTile);
+            isHardmode = _biomeManager.IsHardmode;
+            spawnRateMultiplier = _biomeManager.GetSpawnRateMultiplier(biome);
+        }
+
+        // Apply biome spawn rate multiplier to spawn chance
+        spawnChance *= spawnRateMultiplier;
+
+        if (_random.NextSingle() > spawnChance) return;
+
+        // Get valid enemies for this location and biome
+        List<EnemyData> validEnemies;
+        if (_biomeManager != null)
+        {
+            // Use biome-aware spawning
+            validEnemies = EnemyRegistry.GetSpawnableInBiome(biome, depth, isSurface, isHardmode).ToList();
+        }
+        else
+        {
+            // Fallback to basic spawning
+            validEnemies = EnemyRegistry.GetSpawnableAt(depth, isSurface).ToList();
+        }
+
         if (validEnemies.Count == 0) return;
 
-        // Weighted random selection
-        float totalWeight = validEnemies.Sum(e => e.SpawnWeight);
+        // Weighted random selection with biome bonus
+        float totalWeight = validEnemies.Sum(e =>
+            _biomeManager != null ? EnemyRegistry.GetSpawnWeight(e, biome) : e.SpawnWeight);
         float roll = _random.NextSingle() * totalWeight;
         float cumulative = 0f;
 
         EnemyData? selected = null;
         foreach (var data in validEnemies)
         {
-            cumulative += data.SpawnWeight;
+            float weight = _biomeManager != null ? EnemyRegistry.GetSpawnWeight(data, biome) : data.SpawnWeight;
+            cumulative += weight;
             if (roll <= cumulative)
             {
                 selected = data;
@@ -168,6 +209,9 @@ public class EnemyManager
         // Spawn the enemy
         var enemy = new Enemy(selected.Type, spawnPos.Value, _difficulty, _random.Next());
         _enemies.Add(enemy);
+
+        // Debug output for biome spawning
+        System.Diagnostics.Debug.WriteLine($"Spawned {selected.Name} in {biome} biome at depth {depth}");
     }
 
     /// <summary>
@@ -231,8 +275,23 @@ public class EnemyManager
 
             if (killed)
             {
-                // Spawn drops
-                _dropManager.SpawnEnemyDrops(enemy.Center, enemy.GoldReward, enemy.XPReward);
+                // Calculate biome multipliers for rewards
+                float goldMultiplier = 1f;
+                float xpMultiplier = 1f;
+
+                if (_biomeManager != null)
+                {
+                    Point enemyTile = WorldCoordinates.WorldToTile(enemy.Center);
+                    BiomeType biome = _biomeManager.GetBiomeAt(enemyTile);
+                    goldMultiplier = _biomeManager.GetGoldMultiplier(biome);
+                    xpMultiplier = _biomeManager.GetXPMultiplier(biome);
+                }
+
+                int adjustedGold = (int)(enemy.GoldReward * goldMultiplier);
+                int adjustedXP = (int)(enemy.XPReward * xpMultiplier);
+
+                // Spawn drops with biome-adjusted rewards
+                _dropManager.SpawnEnemyDrops(enemy.Center, adjustedGold, adjustedXP);
                 OnEnemyKilled?.Invoke(enemy);
             }
         }
@@ -259,7 +318,22 @@ public class EnemyManager
 
             if (killed)
             {
-                _dropManager.SpawnEnemyDrops(enemy.Center, enemy.GoldReward, enemy.XPReward);
+                // Calculate biome multipliers for rewards
+                float goldMultiplier = 1f;
+                float xpMultiplier = 1f;
+
+                if (_biomeManager != null)
+                {
+                    Point enemyTile = WorldCoordinates.WorldToTile(enemy.Center);
+                    BiomeType biome = _biomeManager.GetBiomeAt(enemyTile);
+                    goldMultiplier = _biomeManager.GetGoldMultiplier(biome);
+                    xpMultiplier = _biomeManager.GetXPMultiplier(biome);
+                }
+
+                int adjustedGold = (int)(enemy.GoldReward * goldMultiplier);
+                int adjustedXP = (int)(enemy.XPReward * xpMultiplier);
+
+                _dropManager.SpawnEnemyDrops(enemy.Center, adjustedGold, adjustedXP);
                 OnEnemyKilled?.Invoke(enemy);
             }
         }
@@ -288,6 +362,43 @@ public class EnemyManager
     {
         var enemy = new Enemy(type, position, _difficulty, _random.Next());
         _enemies.Add(enemy);
+        return enemy;
+    }
+
+    /// <summary>
+    /// Spawn a random enemy appropriate for the given biome.
+    /// </summary>
+    public Enemy? SpawnBiomeEnemy(BiomeType biome, Vector2 position)
+    {
+        Point tilePos = WorldCoordinates.WorldToTile(position);
+        int depth = tilePos.Y;
+        bool isSurface = depth < 50;
+        bool isHardmode = _biomeManager?.IsHardmode ?? false;
+
+        var validEnemies = EnemyRegistry.GetSpawnableInBiome(biome, depth, isSurface, isHardmode).ToList();
+        if (validEnemies.Count == 0) return null;
+
+        // Weighted random selection
+        float totalWeight = validEnemies.Sum(e => EnemyRegistry.GetSpawnWeight(e, biome));
+        float roll = _random.NextSingle() * totalWeight;
+        float cumulative = 0f;
+
+        EnemyData? selected = null;
+        foreach (var data in validEnemies)
+        {
+            cumulative += EnemyRegistry.GetSpawnWeight(data, biome);
+            if (roll <= cumulative)
+            {
+                selected = data;
+                break;
+            }
+        }
+
+        if (selected == null) return null;
+
+        var enemy = new Enemy(selected.Type, position, _difficulty, _random.Next());
+        _enemies.Add(enemy);
+        System.Diagnostics.Debug.WriteLine($"Spawned biome enemy: {selected.Name} in {biome}");
         return enemy;
     }
 

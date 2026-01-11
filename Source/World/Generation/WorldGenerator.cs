@@ -1,13 +1,16 @@
-﻿namespace Terrascent.World.Generation;
+﻿using Terrascent.World.Biomes;
+
+namespace Terrascent.World.Generation;
 
 /// <summary>
-/// Generates world terrain using multiple passes.
+/// Generates world terrain using multiple passes with biome support.
 /// </summary>
 public class WorldGenerator
 {
     private readonly PerlinNoise _terrainNoise;
     private readonly PerlinNoise _caveNoise;
     private readonly PerlinNoise _oreNoise;
+    private readonly PerlinNoise _biomeNoise;  // For biome boundaries
     private readonly TreeGenerator _treeGenerator;
     private readonly Random _random;
 
@@ -30,6 +33,10 @@ public class WorldGenerator
 
     public bool GenerateTrees { get; set; } = true;
 
+    // Biome generation parameters
+    public float BiomeFrequency { get; set; } = 0.002f;  // Low frequency for large biomes
+    public int BiomeTransitionWidth { get; set; } = 20;   // Tiles for smooth transitions
+
     public WorldGenerator(int seed)
     {
         Seed = seed;
@@ -38,6 +45,7 @@ public class WorldGenerator
         _terrainNoise = new PerlinNoise(seed);
         _caveNoise = new PerlinNoise(seed + 1000);
         _oreNoise = new PerlinNoise(seed + 2000);
+        _biomeNoise = new PerlinNoise(seed + 4000);  // New noise for biomes
         _treeGenerator = new TreeGenerator(seed + 3000);
 
         System.Diagnostics.Debug.WriteLine($"WorldGenerator created with seed: {seed}");
@@ -48,29 +56,83 @@ public class WorldGenerator
         int chunkWorldX = chunk.Position.X * Chunk.SIZE;
         int chunkWorldY = chunk.Position.Y * Chunk.SIZE;
 
-        // === PASS 1, 2, 3: Terrain, Caves, Ores ===
+        // === PASS 1, 2, 3: Terrain, Caves, Ores (with biome awareness) ===
         for (int localX = 0; localX < Chunk.SIZE; localX++)
         {
             int worldX = chunkWorldX + localX;
             int surfaceY = GetSurfaceHeight(worldX);
+            BiomeType surfaceBiome = GetSurfaceBiome(worldX);
 
             for (int localY = 0; localY < Chunk.SIZE; localY++)
             {
                 int worldY = chunkWorldY + localY;
-                TileType type = GetTileType(worldX, worldY, surfaceY);
+                TileType type = GetTileType(worldX, worldY, surfaceY, surfaceBiome);
 
                 ref var tile = ref chunk.GetTile(localX, localY);
                 tile = new Tile(type);
             }
         }
 
-        // === PASS 4: Trees ===
+        // === PASS 4: Trees (biome-specific) ===
         if (GenerateTrees)
         {
             GenerateTreesForChunk(chunk, chunkWorldX, chunkWorldY);
         }
 
         chunk.MarkLoaded();
+    }
+
+    /// <summary>
+    /// Determine the surface biome at a given X coordinate.
+    /// Uses noise to create smooth biome boundaries.
+    /// </summary>
+    public BiomeType GetSurfaceBiome(int worldX)
+    {
+        // Multi-octave biome noise for variety
+        float noise = _biomeNoise.OctaveNoise01(worldX, 0, 3, 0.5f, BiomeFrequency);
+
+        // Secondary noise for sub-biomes
+        float subNoise = _biomeNoise.Noise01(worldX * BiomeFrequency * 3, 100);
+
+        // Temperature-like gradient (affects snow vs desert)
+        float tempNoise = _biomeNoise.OctaveNoise01(worldX, 500, 2, 0.5f, BiomeFrequency * 0.5f);
+
+        // Map noise values to biomes
+        // Forest is default, other biomes occur in specific noise ranges
+
+        if (noise < 0.15f)
+        {
+            // Snow biome (cold regions)
+            return BiomeType.Snow;
+        }
+        else if (noise > 0.85f)
+        {
+            // Desert biome (hot/dry regions)
+            return BiomeType.Desert;
+        }
+        else if (noise > 0.6f && noise < 0.75f && subNoise > 0.5f)
+        {
+            // Jungle biome (humid regions)
+            return BiomeType.Jungle;
+        }
+        else if (noise > 0.35f && noise < 0.45f && subNoise > 0.7f)
+        {
+            // Mushroom biome (rare)
+            return BiomeType.Mushroom;
+        }
+        else if (noise > 0.2f && noise < 0.3f && subNoise < 0.3f)
+        {
+            // Corruption/evil biome
+            return BiomeType.Corruption;
+        }
+        else if (noise > 0.7f && noise < 0.8f && subNoise < 0.4f)
+        {
+            // Crimson/evil biome (alternative)
+            return BiomeType.Crimson;
+        }
+
+        // Default forest biome
+        return BiomeType.Forest;
     }
 
     /// <summary>
@@ -93,6 +155,7 @@ public class WorldGenerator
                 continue;
 
             int surfaceY = GetSurfaceHeight(worldX);
+            BiomeType biome = GetSurfaceBiome(worldX);
 
             // Skip if surface is way outside this chunk's Y range
             if (surfaceY < chunkTopY - 20 || surfaceY > chunkBottomY + 5)
@@ -107,20 +170,45 @@ public class WorldGenerator
                 localSurfaceY >= 0 && localSurfaceY < Chunk.SIZE)
             {
                 ref var surfaceTile = ref chunk.GetTile(localSurfaceX, localSurfaceY);
-                if (surfaceTile.Type != TileType.Grass)
+
+                // Check for appropriate grass types based on biome
+                bool isValidGrass = surfaceTile.Type == TileType.Grass ||
+                                   surfaceTile.Type == TileType.JungleGrass ||
+                                   surfaceTile.Type == TileType.MushroomGrass;
+
+                // Don't place trees on sand, snow surface, or corrupt grass
+                if (!isValidGrass)
                     continue;
             }
 
-            // Generate and place tree
+            // Generate and place tree with biome-specific wood
+            TileType woodType = GetBiomeWoodType(biome);
             var tree = _treeGenerator.GenerateTree(worldX, surfaceY);
-            PlaceTreeInChunk(chunk, tree, chunkWorldX, chunkWorldY);
+            PlaceTreeInChunk(chunk, tree, chunkWorldX, chunkWorldY, woodType);
         }
+    }
+
+    /// <summary>
+    /// Get the wood type for a specific biome.
+    /// </summary>
+    private TileType GetBiomeWoodType(BiomeType biome)
+    {
+        return biome switch
+        {
+            BiomeType.Snow => TileType.BorealWood,
+            BiomeType.Jungle => TileType.RichMahogany,
+            BiomeType.Corruption => TileType.Ebonwood,
+            BiomeType.Crimson => TileType.Shadewood,
+            BiomeType.Hallow => TileType.Pearlwood,
+            BiomeType.Desert => TileType.PalmWood,
+            _ => TileType.Wood
+        };
     }
 
     /// <summary>
     /// Place tree tiles that fall within this chunk.
     /// </summary>
-    private void PlaceTreeInChunk(Chunk chunk, TreeData tree, int chunkWorldX, int chunkWorldY)
+    private void PlaceTreeInChunk(Chunk chunk, TreeData tree, int chunkWorldX, int chunkWorldY, TileType woodType = TileType.Wood)
     {
         // Place trunk (from base going up)
         int trunkTopY = tree.TrunkBaseY - tree.TrunkHeight + 1;
@@ -136,7 +224,7 @@ public class WorldGenerator
                 ref var tile = ref chunk.GetTile(localX, localY);
                 if (tile.IsAir)
                 {
-                    tile = new Tile(TileType.Wood);
+                    tile = new Tile(woodType);
                 }
             }
         }
@@ -225,6 +313,7 @@ public class WorldGenerator
 
     public int GetSurfaceHeight(int worldX)
     {
+        // Get base terrain height
         float noise = _terrainNoise.OctaveNoise01(
             worldX, 0,
             TerrainOctaves,
@@ -232,11 +321,22 @@ public class WorldGenerator
             TerrainFrequency
         );
 
-        int height = (int)(noise * TerrainHeight);
+        // Modify height based on biome
+        BiomeType biome = GetSurfaceBiome(worldX);
+        float biomeHeightMod = biome switch
+        {
+            BiomeType.Desert => 0.3f,      // Flatter
+            BiomeType.Snow => 1.2f,        // More mountainous
+            BiomeType.Jungle => 0.8f,      // Slightly flatter
+            BiomeType.Mushroom => 0.5f,    // Very flat
+            _ => 1.0f
+        };
+
+        int height = (int)(noise * TerrainHeight * biomeHeightMod);
         return SurfaceLevel + height;
     }
 
-    private TileType GetTileType(int worldX, int worldY, int surfaceY)
+    private TileType GetTileType(int worldX, int worldY, int surfaceY, BiomeType surfaceBiome)
     {
         if (worldY < surfaceY)
             return TileType.Air;
@@ -246,17 +346,62 @@ public class WorldGenerator
         if (depth > 8 && IsCave(worldX, worldY, depth))
             return TileType.Air;
 
+        // Get biome-specific tiles
+        return GetBiomeTile(worldX, worldY, depth, surfaceBiome);
+    }
+
+    /// <summary>
+    /// Get the tile type based on biome and depth.
+    /// </summary>
+    private TileType GetBiomeTile(int worldX, int worldY, int depth, BiomeType biome)
+    {
+        // Surface tile
         if (depth == 0)
-            return TileType.Grass;
+        {
+            return biome switch
+            {
+                BiomeType.Snow => TileType.Snow,
+                BiomeType.Desert => TileType.Sand,
+                BiomeType.Jungle => TileType.JungleGrass,
+                BiomeType.Mushroom => TileType.MushroomGrass,
+                BiomeType.Corruption => TileType.CorruptGrass,
+                BiomeType.Crimson => TileType.CrimsonGrass,
+                BiomeType.Hallow => TileType.HallowedGrass,
+                _ => TileType.Grass
+            };
+        }
 
+        // Subsurface layer (before stone)
         if (depth < DirtDepth)
-            return TileType.Dirt;
+        {
+            return biome switch
+            {
+                BiomeType.Snow => (depth < 3 ? TileType.Snow : TileType.Ice),
+                BiomeType.Desert => TileType.Sand,
+                BiomeType.Jungle => TileType.Mud,
+                BiomeType.Mushroom => TileType.Mud,
+                BiomeType.Corruption => TileType.Dirt,  // Corrupted dirt looks same
+                BiomeType.Crimson => TileType.Dirt,
+                _ => TileType.Dirt
+            };
+        }
 
+        // Check for ores first
         TileType oreType = GetOreType(worldX, worldY, depth);
         if (oreType != TileType.Air)
             return oreType;
 
-        return TileType.Stone;
+        // Stone layer (biome-specific stone)
+        return biome switch
+        {
+            BiomeType.Snow => TileType.Ice,
+            BiomeType.Desert => (depth < 20 ? TileType.Sandstone : TileType.Stone),
+            BiomeType.Jungle => TileType.Stone,  // Jungle uses normal stone underground
+            BiomeType.Corruption => (depth < 40 ? TileType.Ebonstone : TileType.Stone),
+            BiomeType.Crimson => (depth < 40 ? TileType.Crimstone : TileType.Stone),
+            BiomeType.Hallow => (depth < 40 ? TileType.Pearlstone : TileType.Stone),
+            _ => TileType.Stone
+        };
     }
 
     private bool IsCave(int worldX, int worldY, int depth)

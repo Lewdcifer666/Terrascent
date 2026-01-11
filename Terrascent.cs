@@ -14,6 +14,7 @@ using Terrascent.Saves;
 using Terrascent.Systems;
 using Terrascent.UI;
 using Terrascent.World;
+using Terrascent.World.Biomes;
 using Terrascent.World.Generation;
 
 namespace Terrascent;
@@ -33,6 +34,7 @@ public class TerrascentGame : Game
     // World
     private ChunkManager _chunkManager = null!;
     private WorldGenerator _worldGenerator = null!;
+    private BiomeManager _biomeManager = null!;
 
     // Entities
     private Player _player = null!;
@@ -154,8 +156,20 @@ public class TerrascentGame : Game
         _dropManager = new DropManager();
         _enemyManager = new EnemyManager(_difficultyManager, _dropManager, _worldSeed);
 
+        // Create biome manager
+        _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
+
+        // Wire biome manager to enemy manager for biome-aware spawning
+        _enemyManager.SetBiomeManager(_biomeManager);
+
+        // Subscribe to biome events
+        _biomeManager.OnBiomeChanged += (oldBiome, newBiome) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Biome changed: {oldBiome.GetDisplayName()} -> {newBiome.GetDisplayName()}");
+        };
+
         // Create boss system
-        _bossManager = new BossManager(_difficultyManager, _dropManager, _enemyManager, _worldSeed);
+        _bossManager = new BossManager(_difficultyManager, _dropManager, _enemyManager, _worldSeed); ;
 
         // Create crafting system
         _craftingManager = new CraftingManager(_player, _bossManager);
@@ -320,6 +334,13 @@ public class TerrascentGame : Game
             _graphics.PreferredBackBufferWidth,
             _graphics.PreferredBackBufferHeight
         );
+
+        // Wire up biome UI with biome manager
+        _uiManager.SetBiomeManager(
+            _biomeManager,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
     }
 
     protected override void Update(GameTime gameTime)
@@ -413,6 +434,17 @@ public class TerrascentGame : Game
         _dropManager.Clear();
         _bossManager.Clear();
 
+        // Recreate biome manager with new seed
+        _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
+        _enemyManager.SetBiomeManager(_biomeManager);
+
+        // Recreate biome UI with new manager
+        _uiManager.SetBiomeManager(
+            _biomeManager,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
+
         // Respawn player
         int surfaceY = _worldGenerator.GetSurfaceHeight(0);
         _player.SpawnAt(0, surfaceY);
@@ -447,15 +479,32 @@ public class TerrascentGame : Game
         // Update crafting (station detection)
         _craftingManager.Update(dt, _chunkManager);
 
-        // Debug: Spawn test enemy (F7)
+        // Update biome manager (spreading and detection)
+        Point playerTilePos = WorldCoordinates.WorldToTile(_player.Center);
+        _biomeManager.Update(dt, playerTilePos);
+
+        // Detect current biome at player position (updates UI via event)
+        _biomeManager.DetectBiome(playerTilePos);
+
+        // Debug: Spawn test enemy (F7) - now biome-aware
         if (_input.IsKeyPressed(Keys.F7))
         {
             Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 100, -50);
-            _enemyManager.SpawnEnemy(EnemyType.Slime, spawnPos);
-            System.Diagnostics.Debug.WriteLine("Spawned test Slime!");
+            BiomeType currentBiome = _biomeManager.CurrentBiome;
+            var enemy = _enemyManager.SpawnBiomeEnemy(currentBiome, spawnPos);
+            if (enemy != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Spawned biome enemy in {currentBiome}!");
+            }
+            else
+            {
+                // Fallback to slime if no biome enemy available
+                _enemyManager.SpawnEnemy(EnemyType.Slime, spawnPos);
+                System.Diagnostics.Debug.WriteLine("Spawned fallback Slime!");
+            }
         }
 
-        // Debug: Spawn harder enemy (F8)
+        // Debug: Spawn harder enemy (F8) - specific type
         if (_input.IsKeyPressed(Keys.F8))
         {
             Vector2 spawnPos = _player.Position + new Vector2(_player.FacingDirection * 100, -50);
@@ -1403,6 +1452,14 @@ public class TerrascentGame : Game
             System.Diagnostics.Debug.WriteLine($"Time: {_difficultyManager.ElapsedTime:F0}s");
             System.Diagnostics.Debug.WriteLine($"Chests Opened: {_chestManager.TotalChestsOpened}");
             System.Diagnostics.Debug.WriteLine($"Active Enemies: {_enemyManager.ActiveEnemyCount}");
+
+            // Biome info
+            BiomeType currentBiome = _biomeManager.CurrentBiome;
+            var biomeData = BiomeRegistry.Get(currentBiome);
+            System.Diagnostics.Debug.WriteLine($"Current Biome: {currentBiome.GetDisplayName()} (Danger: {biomeData.DangerLevel})");
+            System.Diagnostics.Debug.WriteLine($"  Gold x{biomeData.GoldMultiplier:F1} | XP x{biomeData.XPMultiplier:F1} | Spawns x{biomeData.SpawnRateMultiplier:F1}");
+            System.Diagnostics.Debug.WriteLine($"  Hardmode: {_biomeManager.IsHardmode}");
+
             System.Diagnostics.Debug.WriteLine($"Stats: {_player.Stats.GetStatSummary()}");
             System.Diagnostics.Debug.WriteLine($"Upgrades: {_player.UpgradeStats.GetSummary()}");
             System.Diagnostics.Debug.WriteLine($"Rerolls: {_player.LevelUp.RerollsRemaining}/{_player.LevelUp.MaxRerolls} | Banishes: {_player.LevelUp.BanishesRemaining}/{_player.LevelUp.MaxBanishes}");

@@ -20,7 +20,8 @@ public class BiomeManager
 
     // Detection cache (for performance)
     private BiomeType _cachedBiome = BiomeType.Forest;
-    private Point _cachedPosition = new Point(int.MinValue, int.MinValue);
+    private Point _cachedPosition;
+    private bool _cacheValid = false;  // Use flag instead of MinValue sentinel
     private const int CACHE_RADIUS = 5;  // Recalculate if player moves this many tiles
 
     /// <summary>
@@ -69,22 +70,30 @@ public class BiomeManager
     public BiomeType DetectBiome(Point tilePosition)
     {
         // Check cache first
-        int dx = Math.Abs(tilePosition.X - _cachedPosition.X);
-        int dy = Math.Abs(tilePosition.Y - _cachedPosition.Y);
-        if (dx < CACHE_RADIUS && dy < CACHE_RADIUS)
+        if (_cacheValid)
         {
-            return _cachedBiome;
+            int dx = Math.Abs(tilePosition.X - _cachedPosition.X);
+            int dy = Math.Abs(tilePosition.Y - _cachedPosition.Y);
+            if (dx < CACHE_RADIUS && dy < CACHE_RADIUS)
+            {
+                return _cachedBiome;
+            }
         }
 
         BiomeType newBiome = CalculateBiome(tilePosition);
 
         // Fire event if biome changed
-        if (newBiome != _cachedBiome)
+        if (newBiome != _cachedBiome || !_cacheValid)
         {
             var oldBiome = _cachedBiome;
             _cachedBiome = newBiome;
             _cachedPosition = tilePosition;
-            OnBiomeChanged?.Invoke(oldBiome, newBiome);
+            _cacheValid = true;
+
+            if (oldBiome != newBiome)
+            {
+                OnBiomeChanged?.Invoke(oldBiome, newBiome);
+            }
         }
         else
         {

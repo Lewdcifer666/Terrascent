@@ -6,6 +6,7 @@ using Terrascent.Entities;
 using Terrascent.Entities.Bosses;
 using Terrascent.Items;
 using Terrascent.Progression;
+using Terrascent.World.Biomes;
 
 namespace Terrascent.UI;
 
@@ -23,6 +24,7 @@ public class UIManager
     public LevelUpUI LevelUpUI { get; private set; } = null!;
     public BossHealthBarUI BossHealthBarUI { get; private set; } = null!;
     public CraftingUI? CraftingUI { get; private set; }
+    public BiomeUI? BiomeUI { get; private set; }
 
     // Crafting manager reference
     public CraftingManager? _craftingManager;
@@ -32,6 +34,9 @@ public class UIManager
 
     // Boss manager reference
     public BossManager? _bossManager;
+
+    // Biome manager reference
+    private BiomeManager? _biomeManager;
 
     // Held item (being dragged)
     private ItemStack _heldItem = ItemStack.Empty;
@@ -107,6 +112,15 @@ public class UIManager
     }
 
     /// <summary>
+    /// Set the biome manager reference and create UI.
+    /// </summary>
+    public void SetBiomeManager(BiomeManager biomeManager, int screenWidth, int screenHeight)
+    {
+        _biomeManager = biomeManager;
+        BiomeUI = new BiomeUI(biomeManager, screenWidth, screenHeight);
+    }
+
+    /// <summary>
     /// Handle screen resize.
     /// </summary>
     public void OnScreenResize(int screenWidth, int screenHeight)
@@ -115,6 +129,7 @@ public class UIManager
         LevelUpUI?.OnScreenResize(screenWidth, screenHeight);
         BossHealthBarUI?.OnScreenResize(screenWidth, screenHeight);
         CraftingUI?.OnScreenResize(screenWidth, screenHeight);
+        BiomeUI?.OnScreenResize(screenWidth, screenHeight);
     }
 
     /// <summary>
@@ -124,6 +139,9 @@ public class UIManager
     {
         // Always update boss health bar (it handles visibility internally)
         BossHealthBarUI?.Update(deltaTime);
+
+        // Always update biome UI (HUD element)
+        BiomeUI?.Update(deltaTime);
 
         // Level-up UI takes priority over everything
         if (IsLevelUpOpen)
@@ -408,6 +426,9 @@ public class UIManager
 
         // Always draw boss health bar (it handles visibility internally)
         BossHealthBarUI?.Draw(spriteBatch, pixelTexture);
+
+        // Always draw biome UI (HUD element)
+        BiomeUI?.Draw(spriteBatch, pixelTexture);
 
         if (IsInventoryOpen)
         {
