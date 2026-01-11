@@ -1021,6 +1021,9 @@ public class BiomePlacement
     /// Returns the two biomes to blend and the blend factor.
     /// Biome1 = left/from biome, Biome2 = right/to biome
     /// BlendFactor 0.0 = fully Biome1, BlendFactor 1.0 = fully Biome2
+    /// 
+    /// CRITICAL: Blend factor must be CONTINUOUS across zone boundaries!
+    /// The transition zone spans TRANSITION_WIDTH tiles centered on the boundary.
     /// </summary>
     public BiomeBlendInfo GetBiomeBlendInfo(int worldX)
     {
@@ -1044,18 +1047,22 @@ public class BiomePlacement
             foreach (var zone in _zones)
             {
                 // Approaching left edge of a zone (Forest → Zone)
-                // worldX is in Forest, zone starts soon
-                if (worldX >= zone.StartX - TRANSITION_WIDTH && worldX < zone.StartX)
+                // Transition starts TRANSITION_WIDTH/2 tiles before zone
+                int transitionStart = zone.StartX - TRANSITION_WIDTH / 2;
+                if (worldX >= transitionStart && worldX < zone.StartX)
                 {
-                    float blend = (float)(worldX - (zone.StartX - TRANSITION_WIDTH)) / TRANSITION_WIDTH;
+                    // Blend goes from 0.0 at transitionStart to 0.5 at zone.StartX
+                    float blend = (float)(worldX - transitionStart) / TRANSITION_WIDTH;
                     return new BiomeBlendInfo(BiomeType.Forest, zone.Biome, blend);
                 }
 
                 // Past right edge of a zone (Zone → Forest)
-                // worldX is in Forest, just left the zone
-                if (worldX >= zone.EndX && worldX < zone.EndX + TRANSITION_WIDTH)
+                // Transition ends TRANSITION_WIDTH/2 tiles after zone
+                int transitionEnd = zone.EndX + TRANSITION_WIDTH / 2;
+                if (worldX >= zone.EndX && worldX < transitionEnd)
                 {
-                    float blend = (float)(worldX - zone.EndX) / TRANSITION_WIDTH;
+                    // Blend goes from 0.5 at zone.EndX to 1.0 at transitionEnd
+                    float blend = 0.5f + (float)(worldX - zone.EndX) / TRANSITION_WIDTH;
                     return new BiomeBlendInfo(zone.Biome, BiomeType.Forest, blend);
                 }
             }
@@ -1072,21 +1079,22 @@ public class BiomePlacement
         BiomeType leftBiome = GetAdjacentBiome(worldX, primaryZone, true);
         BiomeType rightBiome = GetAdjacentBiome(worldX, primaryZone, false);
 
-        // Near left edge - transitioning FROM left biome INTO this one
-        // distToStart = 0 means we just entered, should be mostly leftBiome
-        // distToStart = TRANSITION_WIDTH means we're past transition, fully primaryBiome
-        if (distToStart < TRANSITION_WIDTH)
+        // Near left edge - continuing transition FROM left biome INTO this one
+        // Transition continues from 0.5 at boundary to 1.0 at TRANSITION_WIDTH/2 inside
+        int halfTransition = TRANSITION_WIDTH / 2;
+        if (distToStart < halfTransition)
         {
-            float blend = (float)distToStart / TRANSITION_WIDTH;
+            // Blend goes from 0.5 at distToStart=0 to 1.0 at distToStart=halfTransition
+            float blend = 0.5f + (float)distToStart / TRANSITION_WIDTH;
             return new BiomeBlendInfo(leftBiome, primaryBiome, blend);
         }
 
         // Near right edge - transitioning FROM this biome INTO right biome
-        // distToEnd = TRANSITION_WIDTH means we're just entering transition, mostly primaryBiome
-        // distToEnd = 0 means we're about to leave, should be mostly rightBiome
-        if (distToEnd < TRANSITION_WIDTH)
+        // Transition starts at TRANSITION_WIDTH/2 before end, blend goes from 0.0 to 0.5
+        if (distToEnd < halfTransition)
         {
-            float blend = 1.0f - ((float)distToEnd / TRANSITION_WIDTH);
+            // Blend goes from 0.0 at distToEnd=halfTransition to 0.5 at distToEnd=0
+            float blend = (float)(halfTransition - distToEnd) / TRANSITION_WIDTH;
             return new BiomeBlendInfo(primaryBiome, rightBiome, blend);
         }
 

@@ -59,6 +59,9 @@ public class TerrascentGame : Game
     // Crafting System
     private CraftingManager _craftingManager = null!;
 
+    // Map System
+    private MapManager _mapManager = null!;
+
     // Temp rendering
     private Texture2D _pixelTexture = null!;
 
@@ -76,7 +79,8 @@ public class TerrascentGame : Game
     // Debug and Map state
     private bool _showDebugOverlay = false;
     private bool _showMap = false;
-    private Dictionary<Point, bool> _exploredTiles = new();  // Fog of war tracking
+    private bool _isDraggingMap = false;
+    private Vector2 _lastMapDragPos;
 
     public TerrascentGame()
     {
@@ -165,6 +169,9 @@ public class TerrascentGame : Game
         // Create biome manager and wire to world config
         _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
         _biomeManager.SetWorldConfig(_worldGenerator.Config);
+
+        // Create map manager
+        _mapManager = new MapManager(_worldGenerator, _chunkManager);
 
         // Wire biome manager to enemy manager for biome-aware spawning
         _enemyManager.SetBiomeManager(_biomeManager);
@@ -401,11 +408,86 @@ public class TerrascentGame : Game
         if (_input.IsKeyPressed(Keys.M) || _input.IsKeyPressed(Keys.F4))
         {
             _showMap = !_showMap;
+            _mapManager.IsOpen = _showMap;
+            if (_showMap)
+            {
+                // Center map on player when opening
+                Point playerTile = WorldCoordinates.WorldToTile(_player.Center);
+                _mapManager.CenterOn(playerTile);
+            }
             System.Diagnostics.Debug.WriteLine($"Map: {(_showMap ? "ON" : "OFF")}");
         }
 
-        // Only run gameplay updates if no UI panel is blocking
-        if (!_uiManager.IsAnyPanelOpen)
+        // Map controls when map is open
+        if (_showMap)
+        {
+            // Zoom with mouse scroll or +/-
+            if (_input.ScrollWheelDelta != 0)
+            {
+                if (_input.ScrollWheelDelta > 0)
+                    _mapManager.ZoomIn();
+                else
+                    _mapManager.ZoomOut();
+            }
+
+            if (_input.IsKeyPressed(Keys.OemPlus) || _input.IsKeyPressed(Keys.Add))
+                _mapManager.ZoomIn();
+            if (_input.IsKeyPressed(Keys.OemMinus) || _input.IsKeyPressed(Keys.Subtract))
+                _mapManager.ZoomOut();
+
+            // Pan with arrow keys or WASD
+            float panSpeed = 10f / _mapManager.Zoom;
+            Vector2 panDelta = Vector2.Zero;
+            if (_input.IsKeyDown(Keys.Left) || _input.IsKeyDown(Keys.A)) panDelta.X -= panSpeed;
+            if (_input.IsKeyDown(Keys.Right) || _input.IsKeyDown(Keys.D)) panDelta.X += panSpeed;
+            if (_input.IsKeyDown(Keys.Up) || _input.IsKeyDown(Keys.W)) panDelta.Y -= panSpeed;
+            if (_input.IsKeyDown(Keys.Down) || _input.IsKeyDown(Keys.S)) panDelta.Y += panSpeed;
+            if (panDelta != Vector2.Zero)
+                _mapManager.Pan(panDelta);
+
+            // Mouse drag to pan
+            if (_input.IsLeftMouseDown())
+            {
+                if (!_isDraggingMap)
+                {
+                    _isDraggingMap = true;
+                    _lastMapDragPos = _input.MousePositionV;
+                }
+                else
+                {
+                    Vector2 dragDelta = _lastMapDragPos - _input.MousePositionV;
+                    _mapManager.Pan(dragDelta / _mapManager.Zoom);
+                    _lastMapDragPos = _input.MousePositionV;
+                }
+            }
+            else
+            {
+                _isDraggingMap = false;
+            }
+
+            // Reset view with R
+            if (_input.IsKeyPressed(Keys.R))
+            {
+                _mapManager.ResetView();
+                Point playerTile = WorldCoordinates.WorldToTile(_player.Center);
+                _mapManager.CenterOn(playerTile);
+            }
+
+            // Reveal all with Shift+R (debug)
+            if (_input.IsKeyDown(Keys.LeftShift) && _input.IsKeyPressed(Keys.R))
+            {
+                _mapManager.RevealAll();
+                System.Diagnostics.Debug.WriteLine("Map fully revealed!");
+            }
+
+            // Update map hover info
+            Rectangle mapBounds = GetMapBounds();
+            Point playerTilePos = WorldCoordinates.WorldToTile(_player.Center);
+            _mapManager.Update(deltaTime, playerTilePos, _input.MousePositionV, mapBounds);
+        }
+
+        // Only run gameplay updates if no UI panel is blocking AND map is closed
+        if (!_uiManager.IsAnyPanelOpen && !_showMap)
         {
             int physicsUpdates = _gameLoop.Update(deltaTime, FixedUpdate);
             VariableUpdate(deltaTime);
@@ -475,6 +557,9 @@ public class TerrascentGame : Game
         _biomeManager.SetWorldConfig(_worldGenerator.Config);
         _enemyManager.SetBiomeManager(_biomeManager);
 
+        // Recreate map manager with new world
+        _mapManager = new MapManager(_worldGenerator, _chunkManager);
+
         // Recreate biome UI with new manager
         _uiManager.SetBiomeManager(
             _biomeManager,
@@ -524,6 +609,9 @@ public class TerrascentGame : Game
 
         // Detect current biome at player position (updates UI via event)
         _biomeManager.DetectBiome(playerTilePos);
+
+        // Update map exploration (reveal tiles around player)
+        _mapManager.UpdateExploredArea(playerTilePos);
 
         // Debug: Spawn test enemy (F7) - now biome-aware
         if (_input.IsKeyPressed(Keys.F7))
@@ -1699,110 +1787,216 @@ public class TerrascentGame : Game
     }
 
     /// <summary>
-    /// Draw minimap/full map overlay.
+    /// Get the map bounds rectangle.
+    /// </summary>
+    private Rectangle GetMapBounds()
+    {
+        int screenWidth = _graphics.PreferredBackBufferWidth;
+        int screenHeight = _graphics.PreferredBackBufferHeight;
+        int margin = 50;
+        return new Rectangle(margin, margin, screenWidth - margin * 2, screenHeight - margin * 2 - 60);
+    }
+
+    /// <summary>
+    /// Draw world map overlay with zoom, pan, and fog of war.
     /// </summary>
     private void DrawMap()
     {
         int screenWidth = _graphics.PreferredBackBufferWidth;
         int screenHeight = _graphics.PreferredBackBufferHeight;
 
-        // Map dimensions
-        int mapWidth = screenWidth - 100;
-        int mapHeight = screenHeight - 100;
-        int mapX = 50;
-        int mapY = 50;
+        Rectangle mapBounds = GetMapBounds();
 
-        // Semi-transparent background
-        _spriteBatch.Draw(_pixelTexture, new Rectangle(mapX - 5, mapY - 5, mapWidth + 10, mapHeight + 10), new Color(0, 0, 0, 220));
+        // Full screen semi-transparent background
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), new Color(0, 0, 0, 200));
 
-        // Title
-        InventoryUI.DrawText(_spriteBatch, _pixelTexture, "WORLD MAP (M to close)", mapX, mapY - 20, Color.White);
+        // Map border
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(mapBounds.X - 3, mapBounds.Y - 3, mapBounds.Width + 6, mapBounds.Height + 6), Color.Gray);
+        _spriteBatch.Draw(_pixelTexture, mapBounds, new Color(20, 30, 40));
 
-        // Calculate visible area
+        // Title and controls
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, "WORLD MAP", mapBounds.X, mapBounds.Y - 25, Color.White);
+        string controls = "[M] Close  [Scroll/+/-] Zoom  [WASD/Arrows/Drag] Pan  [R] Reset";
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, controls, mapBounds.X + 120, mapBounds.Y - 25, Color.Gray);
+
+        // Get visible world area based on zoom/pan
+        Rectangle visibleWorld = _mapManager.GetVisibleWorldBounds();
         int worldWidth = _worldGenerator.Config.Width;
         int worldHeight = _worldGenerator.Config.Height;
 
-        // Scale to fit map
-        float scaleX = (float)mapWidth / worldWidth;
-        float scaleY = (float)mapHeight / worldHeight;
+        // Calculate scale for rendering
+        float scaleX = (float)mapBounds.Width / visibleWorld.Width;
+        float scaleY = (float)mapBounds.Height / visibleWorld.Height;
         float scale = Math.Min(scaleX, scaleY);
 
-        // Center the map
-        int actualMapWidth = (int)(worldWidth * scale);
-        int actualMapHeight = (int)(worldHeight * scale);
-        int offsetX = mapX + (mapWidth - actualMapWidth) / 2;
-        int offsetY = mapY + (mapHeight - actualMapHeight) / 2;
+        // Calculate actual rendered size
+        int renderedWidth = (int)(visibleWorld.Width * scale);
+        int renderedHeight = (int)(visibleWorld.Height * scale);
+        int offsetX = mapBounds.X + (mapBounds.Width - renderedWidth) / 2;
+        int offsetY = mapBounds.Y + (mapBounds.Height - renderedHeight) / 2;
 
-        // Draw world terrain (simplified - sample every N tiles)
-        int sampleRate = Math.Max(1, (int)(4 / scale));  // Sample more at low zoom
-        for (int worldTileX = 0; worldTileX < worldWidth; worldTileX += sampleRate)
+        // Sample rate based on zoom
+        int sampleRate = Math.Max(1, (int)(2 / (_mapManager.Zoom * scale)));
+
+        // Draw terrain with fog of war
+        for (int wx = visibleWorld.X; wx < visibleWorld.X + visibleWorld.Width; wx += sampleRate)
         {
-            int surfaceY = _worldGenerator.GetSurfaceHeight(worldTileX);
+            if (wx < 0 || wx >= worldWidth) continue;
 
-            // Draw surface line
-            int screenPixelX = offsetX + (int)(worldTileX * scale);
-
-            // Get biome color for this X position
-            BiomeType biome = _worldGenerator.GetSurfaceBiome(worldTileX);
+            int surfaceY = _worldGenerator.GetSurfaceHeight(wx);
+            BiomeType biome = _worldGenerator.GetSurfaceBiome(wx);
             Color biomeColor = GetBiomeMapColor(biome);
 
-            // Draw surface marker
-            int surfaceScreenY = offsetY + (int)(surfaceY * scale);
+            int screenX = offsetX + (int)((wx - visibleWorld.X) * scale);
             int pixelSize = Math.Max(1, (int)(sampleRate * scale));
 
-            // Draw a column from surface down (simplified terrain view)
-            for (int y = surfaceScreenY; y < offsetY + actualMapHeight && y < screenHeight; y += pixelSize)
-            {
-                int worldY = (int)((y - offsetY) / scale);
-                WorldLayer layer = _worldGenerator.Config.GetLayerAt(worldY);
+            // Clamp to map bounds
+            if (screenX < mapBounds.X || screenX >= mapBounds.X + mapBounds.Width) continue;
 
-                Color layerColor = layer switch
+            for (int wy = Math.Max(visibleWorld.Y, 0); wy < Math.Min(visibleWorld.Y + visibleWorld.Height, worldHeight); wy += sampleRate)
+            {
+                int screenY = offsetY + (int)((wy - visibleWorld.Y) * scale);
+                if (screenY < mapBounds.Y || screenY >= mapBounds.Y + mapBounds.Height) continue;
+
+                // Check fog of war
+                bool explored = _mapManager.IsTileExplored(wx, wy);
+
+                Color tileColor;
+                if (!explored)
                 {
-                    WorldLayer.Surface => biomeColor,
-                    WorldLayer.Underground => Color.Lerp(biomeColor, Color.Gray, 0.5f),
-                    WorldLayer.Cavern => Color.DarkGray,
-                    WorldLayer.Underworld => Color.DarkRed,
-                    _ => biomeColor
-                };
+                    // Unexplored - dark fog
+                    tileColor = new Color(15, 15, 25);
+                }
+                else if (wy < surfaceY)
+                {
+                    // Sky
+                    tileColor = new Color(135, 206, 235, 150);
+                }
+                else
+                {
+                    // Terrain
+                    WorldLayer layer = _worldGenerator.Config.GetLayerAt(wy);
+                    int depth = wy - surfaceY;
 
-                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenPixelX, y, pixelSize, pixelSize), layerColor);
-            }
+                    tileColor = layer switch
+                    {
+                        WorldLayer.Surface => biomeColor,
+                        WorldLayer.Underground => Color.Lerp(biomeColor, Color.Gray, Math.Min(depth / 100f, 0.6f)),
+                        WorldLayer.Cavern => Color.Lerp(Color.DarkGray, Color.Black, Math.Min((depth - 100) / 200f, 0.3f)),
+                        WorldLayer.Underworld => new Color(120, 40, 40),
+                        _ => biomeColor
+                    };
+                }
 
-            // Draw sky above surface
-            for (int y = offsetY; y < surfaceScreenY; y += pixelSize)
-            {
-                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenPixelX, y, pixelSize, pixelSize), new Color(135, 206, 235, 100));
+                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenX, screenY, pixelSize, pixelSize), tileColor);
             }
         }
 
         // Draw player position marker
         Point playerTile = WorldCoordinates.WorldToTile(_player.Center);
-        int playerMapX = offsetX + (int)(playerTile.X * scale);
-        int playerMapY = offsetY + (int)(playerTile.Y * scale);
-
-        // Player marker (blinking)
-        bool blink = ((int)(DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond / 300) % 2) == 0;
-        if (blink)
+        if (playerTile.X >= visibleWorld.X && playerTile.X < visibleWorld.X + visibleWorld.Width &&
+            playerTile.Y >= visibleWorld.Y && playerTile.Y < visibleWorld.Y + visibleWorld.Height)
         {
-            // White border
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(playerMapX - 4, playerMapY - 4, 9, 9), Color.White);
-            // Blue center
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(playerMapX - 3, playerMapY - 3, 7, 7), Color.Blue);
+            int playerScreenX = offsetX + (int)((playerTile.X - visibleWorld.X) * scale);
+            int playerScreenY = offsetY + (int)((playerTile.Y - visibleWorld.Y) * scale);
+
+            // Blinking marker
+            bool blink = ((int)(DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond / 250) % 2) == 0;
+            int markerSize = Math.Max(6, (int)(8 * _mapManager.Zoom));
+
+            if (blink)
+            {
+                _spriteBatch.Draw(_pixelTexture, new Rectangle(playerScreenX - markerSize / 2 - 1, playerScreenY - markerSize / 2 - 1, markerSize + 2, markerSize + 2), Color.White);
+            }
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(playerScreenX - markerSize / 2, playerScreenY - markerSize / 2, markerSize, markerSize), Color.Blue);
         }
 
-        // Draw spawn point marker
+        // Draw spawn point marker (if visible and explored)
         int spawnX = _worldGenerator.Config.Width / 2;
         int spawnY = _worldGenerator.GetSurfaceHeight(spawnX);
-        int spawnMapX = offsetX + (int)(spawnX * scale);
-        int spawnMapY = offsetY + (int)(spawnY * scale);
-        _spriteBatch.Draw(_pixelTexture, new Rectangle(spawnMapX - 2, spawnMapY - 2, 5, 5), Color.Yellow);
+        if (spawnX >= visibleWorld.X && spawnX < visibleWorld.X + visibleWorld.Width &&
+            spawnY >= visibleWorld.Y && spawnY < visibleWorld.Y + visibleWorld.Height &&
+            _mapManager.IsTileExplored(spawnX, spawnY))
+        {
+            int spawnScreenX = offsetX + (int)((spawnX - visibleWorld.X) * scale);
+            int spawnScreenY = offsetY + (int)((spawnY - visibleWorld.Y) * scale);
+            int markerSize = Math.Max(4, (int)(6 * _mapManager.Zoom));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(spawnScreenX - markerSize / 2, spawnScreenY - markerSize / 2, markerSize, markerSize), Color.Yellow);
+        }
 
-        // Draw biome labels
-        DrawBiomeLabels(offsetX, offsetY, scale, actualMapWidth);
+        // Draw status bar at top of map
+        DrawMapStatusBar(mapBounds);
 
-        // Draw coordinates at bottom
-        string coords = $"Player: {playerTile.X}, {playerTile.Y} | World: {worldWidth} x {worldHeight}";
-        InventoryUI.DrawText(_spriteBatch, _pixelTexture, coords, mapX, mapY + mapHeight + 10, Color.White);
+        // Draw hover info at center bottom
+        DrawMapHoverInfo(mapBounds);
+    }
+
+    /// <summary>
+    /// Draw map status bar with zoom, exploration, and coordinates.
+    /// </summary>
+    private void DrawMapStatusBar(Rectangle mapBounds)
+    {
+        Point playerTile = WorldCoordinates.WorldToTile(_player.Center);
+        int surfaceY = _worldGenerator.GetSurfaceHeight(playerTile.X);
+        int depth = playerTile.Y - surfaceY;
+
+        string zoomText = $"Zoom: {_mapManager.Zoom:F2}x";
+        string exploreText = $"Explored: {_mapManager.ExplorationPercent:F1}%";
+        string posText = $"Position: {playerTile.X}, {playerTile.Y} (Depth: {depth})";
+
+        int y = mapBounds.Y + mapBounds.Height + 5;
+
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, zoomText, mapBounds.X, y, Color.Cyan);
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, exploreText, mapBounds.X + 120, y, Color.LimeGreen);
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, posText, mapBounds.X + 280, y, Color.White);
+    }
+
+    /// <summary>
+    /// Draw block hover info at center bottom of map.
+    /// </summary>
+    private void DrawMapHoverInfo(Rectangle mapBounds)
+    {
+        if (_mapManager.HoveredTile == null) return;
+
+        Point tile = _mapManager.HoveredTile.Value;
+        int infoWidth = 350;
+        int infoHeight = 70;
+        int infoX = mapBounds.X + (mapBounds.Width - infoWidth) / 2;
+        int infoY = mapBounds.Y + mapBounds.Height - infoHeight - 10;
+
+        // Background panel
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(infoX - 2, infoY - 2, infoWidth + 4, infoHeight + 4), Color.Gray);
+        _spriteBatch.Draw(_pixelTexture, new Rectangle(infoX, infoY, infoWidth, infoHeight), new Color(30, 30, 50));
+
+        // Title
+        InventoryUI.DrawText(_spriteBatch, _pixelTexture, "TILE INFO", infoX + infoWidth / 2 - 35, infoY + 5, Color.Yellow);
+
+        if (!_mapManager.IsTileExplored(tile.X, tile.Y))
+        {
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, "Unexplored", infoX + infoWidth / 2 - 40, infoY + 25, Color.Gray);
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Position: {tile.X}, {tile.Y}", infoX + infoWidth / 2 - 60, infoY + 45, Color.DarkGray);
+        }
+        else
+        {
+            // Position
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Position: {tile.X}, {tile.Y}", infoX + 10, infoY + 22, Color.White);
+
+            // Tile type
+            string tileName = _mapManager.HoveredTileType.ToString();
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Tile: {tileName}", infoX + 10, infoY + 38, Color.LightGray);
+
+            // Biome and layer
+            string biome = _mapManager.HoveredBiome.GetDisplayName();
+            string layer = _mapManager.HoveredLayer.ToString();
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Biome: {biome}", infoX + 180, infoY + 22, GetBiomeMapColor(_mapManager.HoveredBiome));
+            InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Layer: {layer}", infoX + 180, infoY + 38, GetLayerColor(_mapManager.HoveredLayer));
+
+            // Depth
+            if (_mapManager.HoveredDepth >= 0)
+            {
+                InventoryUI.DrawText(_spriteBatch, _pixelTexture, $"Depth: {_mapManager.HoveredDepth}", infoX + 180, infoY + 54, Color.Gray);
+            }
+        }
     }
 
     private void DrawBiomeLabels(int offsetX, int offsetY, float scale, int mapWidth)

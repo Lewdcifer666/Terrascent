@@ -14,8 +14,8 @@ public class InputManager
     private KeyboardState _previousKeyboard;
 
     // Mouse state
-    private MouseState _currentMouse;
-    private MouseState _previousMouse;
+    public MouseState _currentMouse;
+    public  MouseState _previousMouse;
 
     // Buffered key presses (persists until consumed)
     private HashSet<Keys> _bufferedKeyPresses = new();
