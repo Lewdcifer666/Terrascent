@@ -73,6 +73,8 @@ public enum ItemCategory
     Accessory,
     Consumable,
     Material,
+    Map,
+    MapCurrency,
 }
 
 public enum ItemRarity
@@ -894,6 +896,242 @@ public static class ItemRegistry
             Category = ItemCategory.Material,
             Rarity = ItemRarity.Uncommon,
             SellValue = 60,
+        },
+
+        // === Map Items ===
+        [ItemType.Map_T1] = new ItemProperties
+        {
+            Name = "Tier 1 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Common,
+            SellValue = 100,
+        },
+
+        [ItemType.Map_T2] = new ItemProperties
+        {
+            Name = "Tier 2 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Common,
+            SellValue = 150,
+        },
+
+        [ItemType.Map_T3] = new ItemProperties
+        {
+            Name = "Tier 3 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Common,
+            SellValue = 200,
+        },
+
+        [ItemType.Map_T4] = new ItemProperties
+        {
+            Name = "Tier 4 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Common,
+            SellValue = 250,
+        },
+
+        [ItemType.Map_T5] = new ItemProperties
+        {
+            Name = "Tier 5 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Common,
+            SellValue = 300,
+        },
+
+        [ItemType.Map_T6] = new ItemProperties
+        {
+            Name = "Tier 6 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 400,
+        },
+
+        [ItemType.Map_T7] = new ItemProperties
+        {
+            Name = "Tier 7 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 500,
+        },
+
+        [ItemType.Map_T8] = new ItemProperties
+        {
+            Name = "Tier 8 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 600,
+        },
+
+        [ItemType.Map_T9] = new ItemProperties
+        {
+            Name = "Tier 9 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 700,
+        },
+
+        [ItemType.Map_T10] = new ItemProperties
+        {
+            Name = "Tier 10 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 800,
+        },
+
+        [ItemType.Map_T11] = new ItemProperties
+        {
+            Name = "Tier 11 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Rare,
+            SellValue = 1000,
+        },
+
+        [ItemType.Map_T12] = new ItemProperties
+        {
+            Name = "Tier 12 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Rare,
+            SellValue = 1200,
+        },
+
+        [ItemType.Map_T13] = new ItemProperties
+        {
+            Name = "Tier 13 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Rare,
+            SellValue = 1500,
+        },
+
+        [ItemType.Map_T14] = new ItemProperties
+        {
+            Name = "Tier 14 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Epic,
+            SellValue = 2000,
+        },
+
+        [ItemType.Map_T15] = new ItemProperties
+        {
+            Name = "Tier 15 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Epic,
+            SellValue = 2500,
+        },
+
+        [ItemType.Map_T16] = new ItemProperties
+        {
+            Name = "Tier 16 Map",
+            MaxStack = 20,
+            Category = ItemCategory.Map,
+            Rarity = ItemRarity.Legendary,
+            SellValue = 5000,
+        },
+
+        // === Map Currency ===
+        [ItemType.OrbOfTransmutation] = new ItemProperties
+        {
+            Name = "Orb of Transmutation",
+            MaxStack = 40,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Common,
+            SellValue = 10,
+        },
+
+        [ItemType.OrbOfAlteration] = new ItemProperties
+        {
+            Name = "Orb of Alteration",
+            MaxStack = 40,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Common,
+            SellValue = 15,
+        },
+
+        [ItemType.RegalOrb] = new ItemProperties
+        {
+            Name = "Regal Orb",
+            MaxStack = 20,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.OrbOfAlchemy] = new ItemProperties
+        {
+            Name = "Orb of Alchemy",
+            MaxStack = 20,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 75,
+        },
+
+        [ItemType.ChaosOrb] = new ItemProperties
+        {
+            Name = "Chaos Orb",
+            MaxStack = 20,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Rare,
+            SellValue = 150,
+        },
+
+        [ItemType.DivineOrb] = new ItemProperties
+        {
+            Name = "Divine Orb",
+            MaxStack = 10,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Epic,
+            SellValue = 500,
+        },
+
+        [ItemType.OrbOfScouring] = new ItemProperties
+        {
+            Name = "Orb of Scouring",
+            MaxStack = 30,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Uncommon,
+            SellValue = 50,
+        },
+
+        [ItemType.VaalOrb] = new ItemProperties
+        {
+            Name = "Vaal Orb",
+            MaxStack = 20,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Rare,
+            SellValue = 200,
+        },
+
+        [ItemType.OrbOfAugmentation] = new ItemProperties
+        {
+            Name = "Orb of Augmentation",
+            MaxStack = 40,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Common,
+            SellValue = 10,
+        },
+
+        [ItemType.ExaltedOrb] = new ItemProperties
+        {
+            Name = "Exalted Orb",
+            MaxStack = 10,
+            Category = ItemCategory.MapCurrency,
+            Rarity = ItemRarity.Legendary,
+            SellValue = 1000,
         },
     };
 

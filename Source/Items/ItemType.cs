@@ -200,4 +200,60 @@ public enum ItemType : ushort
     EmblemWarrior = 912,
     EmblemRanger = 913,
     EmblemSorcerer = 914,
+
+    // === Map Items (1000-1099) ===
+    /// <summary>Tier 1 Map (White, Monster Level 69).</summary>
+    Map_T1 = 1000,
+    /// <summary>Tier 2 Map (White, Monster Level 70).</summary>
+    Map_T2 = 1001,
+    /// <summary>Tier 3 Map (White, Monster Level 71).</summary>
+    Map_T3 = 1002,
+    /// <summary>Tier 4 Map (White, Monster Level 72).</summary>
+    Map_T4 = 1003,
+    /// <summary>Tier 5 Map (White, Monster Level 73).</summary>
+    Map_T5 = 1004,
+    /// <summary>Tier 6 Map (Yellow, Monster Level 74).</summary>
+    Map_T6 = 1005,
+    /// <summary>Tier 7 Map (Yellow, Monster Level 75).</summary>
+    Map_T7 = 1006,
+    /// <summary>Tier 8 Map (Yellow, Monster Level 76).</summary>
+    Map_T8 = 1007,
+    /// <summary>Tier 9 Map (Yellow, Monster Level 77).</summary>
+    Map_T9 = 1008,
+    /// <summary>Tier 10 Map (Yellow, Monster Level 78).</summary>
+    Map_T10 = 1009,
+    /// <summary>Tier 11 Map (Red, Monster Level 79).</summary>
+    Map_T11 = 1010,
+    /// <summary>Tier 12 Map (Red, Monster Level 80).</summary>
+    Map_T12 = 1011,
+    /// <summary>Tier 13 Map (Red, Monster Level 81).</summary>
+    Map_T13 = 1012,
+    /// <summary>Tier 14 Map (Red, Monster Level 82).</summary>
+    Map_T14 = 1013,
+    /// <summary>Tier 15 Map (Red, Monster Level 83).</summary>
+    Map_T15 = 1014,
+    /// <summary>Tier 16 Map (Red, Monster Level 84).</summary>
+    Map_T16 = 1015,
+
+    // === Map Currency (1100-1149) ===
+    /// <summary>Upgrades Normal map to Magic (1-2 mods).</summary>
+    OrbOfTransmutation = 1100,
+    /// <summary>Rerolls a Magic map.</summary>
+    OrbOfAlteration = 1101,
+    /// <summary>Upgrades Magic map to Rare.</summary>
+    RegalOrb = 1102,
+    /// <summary>Upgrades Normal map to Rare (4-6 mods).</summary>
+    OrbOfAlchemy = 1103,
+    /// <summary>Rerolls a Rare map.</summary>
+    ChaosOrb = 1104,
+    /// <summary>Randomizes mod values on a map.</summary>
+    DivineOrb = 1105,
+    /// <summary>Removes all mods from a map.</summary>
+    OrbOfScouring = 1106,
+    /// <summary>Corrupts a map with unpredictable results.</summary>
+    VaalOrb = 1107,
+    /// <summary>Adds a mod to a Magic map.</summary>
+    OrbOfAugmentation = 1108,
+    /// <summary>Adds a mod to a Rare map.</summary>
+    ExaltedOrb = 1109,
 }
