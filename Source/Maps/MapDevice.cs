@@ -1,5 +1,4 @@
 ﻿using Microsoft.Xna.Framework;
-//using Terrascent.Source.Maps;
 
 namespace Terrascent.Maps;
 

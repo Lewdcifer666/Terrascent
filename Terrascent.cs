@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System;
 using Terrascent.Combat;
 using Terrascent.Core;
 using Terrascent.Crafting;
@@ -10,6 +11,7 @@ using Terrascent.Entities.Bosses;
 using Terrascent.Entities.Drops;
 using Terrascent.Entities.Enemies;
 using Terrascent.Items;
+using Terrascent.Maps;
 using Terrascent.Saves;
 using Terrascent.Systems;
 using Terrascent.UI;
@@ -61,6 +63,7 @@ public class TerrascentGame : Game
 
     // Map System
     private MapManager _mapManager = null!;
+    private MapSystemTest _mapSystemTest = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -187,6 +190,10 @@ public class TerrascentGame : Game
 
         // Create crafting system
         _craftingManager = new CraftingManager(_player, _bossManager);
+
+        // Create endgame map system test
+        _mapSystemTest = new MapSystemTest(_player.Inventory);
+        System.Diagnostics.Debug.WriteLine("Map System Test initialized! Press F5-F8 for test controls.");
 
         // Connect XP system to drop manager
         _dropManager.SetXPSystem(_player.XP);
@@ -365,6 +372,9 @@ public class TerrascentGame : Game
 
         // Update UI first (may consume input)
         _uiManager.Update(deltaTime);
+
+        // Update endgame map system test
+        _mapSystemTest.Update(gameTime, _player.Center, _input);
 
         // Only exit with Escape if no UI is open
         if (_input.IsKeyPressed(Keys.Escape) && !_uiManager.IsAnyPanelOpen)
@@ -1053,6 +1063,9 @@ public class TerrascentGame : Game
 
         // Draw UI panels
         _uiManager.Draw(_spriteBatch, _pixelTexture, _input.MousePositionV);
+
+        // Draw endgame map system test UI
+        _mapSystemTest.Draw(_spriteBatch, _pixelTexture, GraphicsDevice.Viewport.Bounds);
 
         _spriteBatch.End();
 
