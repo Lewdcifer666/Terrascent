@@ -1799,6 +1799,7 @@ public class TerrascentGame : Game
 
     /// <summary>
     /// Draw world map overlay with zoom, pan, and fog of war.
+    /// Shows exact 1:1 tile representation.
     /// </summary>
     private void DrawMap()
     {
@@ -1824,7 +1825,7 @@ public class TerrascentGame : Game
         int worldWidth = _worldGenerator.Config.Width;
         int worldHeight = _worldGenerator.Config.Height;
 
-        // Calculate scale for rendering
+        // Calculate scale for rendering (pixels per tile)
         float scaleX = (float)mapBounds.Width / visibleWorld.Width;
         float scaleY = (float)mapBounds.Height / visibleWorld.Height;
         float scale = Math.Min(scaleX, scaleY);
@@ -1835,28 +1836,33 @@ public class TerrascentGame : Game
         int offsetX = mapBounds.X + (mapBounds.Width - renderedWidth) / 2;
         int offsetY = mapBounds.Y + (mapBounds.Height - renderedHeight) / 2;
 
-        // Sample rate based on zoom
-        int sampleRate = Math.Max(1, (int)(2 / (_mapManager.Zoom * scale)));
+        // Pixel size for each tile (at least 1, more when zoomed in)
+        int pixelSize = Math.Max(1, (int)Math.Ceiling(scale));
 
-        // Draw terrain with fog of war
-        for (int wx = visibleWorld.X; wx < visibleWorld.X + visibleWorld.Width; wx += sampleRate)
+        // Sample rate - at high zoom, render every tile (sampleRate=1)
+        // At low zoom, skip tiles to improve performance
+        int sampleRate = scale >= 1.0f ? 1 : Math.Max(1, (int)(1.0f / scale));
+
+        // Clamp visible bounds to world
+        int startX = Math.Max(0, visibleWorld.X);
+        int endX = Math.Min(worldWidth, visibleWorld.X + visibleWorld.Width);
+        int startY = Math.Max(0, visibleWorld.Y);
+        int endY = Math.Min(worldHeight, visibleWorld.Y + visibleWorld.Height);
+
+        // Draw terrain with exact tile colors
+        for (int wx = startX; wx < endX; wx += sampleRate)
         {
-            if (wx < 0 || wx >= worldWidth) continue;
-
-            int surfaceY = _worldGenerator.GetSurfaceHeight(wx);
-            BiomeType biome = _worldGenerator.GetSurfaceBiome(wx);
-            Color biomeColor = GetBiomeMapColor(biome);
-
             int screenX = offsetX + (int)((wx - visibleWorld.X) * scale);
-            int pixelSize = Math.Max(1, (int)(sampleRate * scale));
 
-            // Clamp to map bounds
-            if (screenX < mapBounds.X || screenX >= mapBounds.X + mapBounds.Width) continue;
+            // Skip if outside map bounds
+            if (screenX + pixelSize < mapBounds.X || screenX >= mapBounds.X + mapBounds.Width) continue;
 
-            for (int wy = Math.Max(visibleWorld.Y, 0); wy < Math.Min(visibleWorld.Y + visibleWorld.Height, worldHeight); wy += sampleRate)
+            for (int wy = startY; wy < endY; wy += sampleRate)
             {
                 int screenY = offsetY + (int)((wy - visibleWorld.Y) * scale);
-                if (screenY < mapBounds.Y || screenY >= mapBounds.Y + mapBounds.Height) continue;
+
+                // Skip if outside map bounds
+                if (screenY + pixelSize < mapBounds.Y || screenY >= mapBounds.Y + mapBounds.Height) continue;
 
                 // Check fog of war
                 bool explored = _mapManager.IsTileExplored(wx, wy);
@@ -1867,28 +1873,23 @@ public class TerrascentGame : Game
                     // Unexplored - dark fog
                     tileColor = new Color(15, 15, 25);
                 }
-                else if (wy < surfaceY)
-                {
-                    // Sky
-                    tileColor = new Color(135, 206, 235, 150);
-                }
                 else
                 {
-                    // Terrain
-                    WorldLayer layer = _worldGenerator.Config.GetLayerAt(wy);
-                    int depth = wy - surfaceY;
-
-                    tileColor = layer switch
-                    {
-                        WorldLayer.Surface => biomeColor,
-                        WorldLayer.Underground => Color.Lerp(biomeColor, Color.Gray, Math.Min(depth / 100f, 0.6f)),
-                        WorldLayer.Cavern => Color.Lerp(Color.DarkGray, Color.Black, Math.Min((depth - 100) / 200f, 0.3f)),
-                        WorldLayer.Underworld => new Color(120, 40, 40),
-                        _ => biomeColor
-                    };
+                    // Get actual tile from chunk manager
+                    var tile = _chunkManager.GetTileAt(wx, wy);
+                    tileColor = GetTileMapColor(tile.Type);
                 }
 
-                _spriteBatch.Draw(_pixelTexture, new Rectangle(screenX, screenY, pixelSize, pixelSize), tileColor);
+                // Draw the tile
+                int drawX = Math.Max(screenX, mapBounds.X);
+                int drawY = Math.Max(screenY, mapBounds.Y);
+                int drawWidth = Math.Min(pixelSize, mapBounds.X + mapBounds.Width - drawX);
+                int drawHeight = Math.Min(pixelSize, mapBounds.Y + mapBounds.Height - drawY);
+
+                if (drawWidth > 0 && drawHeight > 0)
+                {
+                    _spriteBatch.Draw(_pixelTexture, new Rectangle(drawX, drawY, drawWidth, drawHeight), tileColor);
+                }
             }
         }
 
@@ -1900,9 +1901,9 @@ public class TerrascentGame : Game
             int playerScreenX = offsetX + (int)((playerTile.X - visibleWorld.X) * scale);
             int playerScreenY = offsetY + (int)((playerTile.Y - visibleWorld.Y) * scale);
 
-            // Blinking marker
+            // Blinking marker - size scales with zoom but has minimum visibility
             bool blink = ((int)(DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond / 250) % 2) == 0;
-            int markerSize = Math.Max(6, (int)(8 * _mapManager.Zoom));
+            int markerSize = Math.Max(4, (int)(scale * 2));
 
             if (blink)
             {
@@ -1920,7 +1921,7 @@ public class TerrascentGame : Game
         {
             int spawnScreenX = offsetX + (int)((spawnX - visibleWorld.X) * scale);
             int spawnScreenY = offsetY + (int)((spawnY - visibleWorld.Y) * scale);
-            int markerSize = Math.Max(4, (int)(6 * _mapManager.Zoom));
+            int markerSize = Math.Max(3, (int)(scale * 1.5f));
             _spriteBatch.Draw(_pixelTexture, new Rectangle(spawnScreenX - markerSize / 2, spawnScreenY - markerSize / 2, markerSize, markerSize), Color.Yellow);
         }
 
@@ -1929,6 +1930,123 @@ public class TerrascentGame : Game
 
         // Draw hover info at center bottom
         DrawMapHoverInfo(mapBounds);
+    }
+
+    /// <summary>
+    /// Get the map color for a specific tile type.
+    /// Returns the exact visual color for 1:1 tile representation.
+    /// </summary>
+    private Color GetTileMapColor(TileType tile)
+    {
+        return tile switch
+        {
+            // Air/Sky
+            TileType.Air => new Color(135, 206, 235),  // Sky blue
+
+            // Basic terrain
+            TileType.Dirt => new Color(151, 107, 75),
+            TileType.Stone => new Color(128, 128, 128),
+            TileType.Grass => new Color(28, 216, 94),
+            TileType.Sand => new Color(219, 190, 127),
+            TileType.Clay => new Color(146, 81, 68),
+            TileType.Mud => new Color(92, 68, 73),
+            TileType.Snow => new Color(235, 240, 255),
+            TileType.Ice => new Color(160, 200, 255),
+            TileType.Ash => new Color(68, 68, 76),
+
+            // Desert tiles
+            TileType.Sandstone => new Color(215, 182, 109),
+            TileType.HardenedSand => new Color(190, 160, 100),
+            TileType.DesertFossil => new Color(180, 165, 130),
+
+            // Snow/Ice tiles
+            TileType.SnowBrick => new Color(200, 210, 230),
+            TileType.ThinIce => new Color(180, 220, 255),
+
+            // Jungle tiles
+            TileType.JungleGrass => new Color(143, 215, 29),
+            TileType.LivingMahogany => new Color(130, 80, 55),
+            TileType.Hive => new Color(218, 164, 32),
+            TileType.HoneyBlock => new Color(255, 200, 50),
+
+            // Mushroom tiles
+            TileType.MushroomGrass => new Color(93, 127, 255),
+
+            // Corruption tiles
+            TileType.CorruptGrass => new Color(109, 90, 178),
+            TileType.Ebonstone => new Color(75, 70, 100),
+            TileType.CorruptSand => new Color(120, 100, 140),
+            TileType.CorruptSandstone => new Color(100, 85, 120),
+            TileType.CorruptIce => new Color(140, 130, 180),
+
+            // Crimson tiles
+            TileType.CrimsonGrass => new Color(185, 50, 50),
+            TileType.Crimstone => new Color(140, 50, 55),
+            TileType.CrimsonSand => new Color(170, 90, 80),
+            TileType.CrimsonSandstone => new Color(150, 70, 65),
+            TileType.CrimsonIce => new Color(200, 100, 110),
+            TileType.Flesh => new Color(160, 60, 65),
+
+            // Hallow tiles
+            TileType.HallowedGrass => new Color(80, 230, 200),
+            TileType.Pearlstone => new Color(200, 180, 255),
+            TileType.HallowedSand => new Color(230, 210, 255),
+            TileType.HallowedSandstone => new Color(210, 190, 240),
+            TileType.HallowedIce => new Color(220, 200, 255),
+
+            // Ores - distinctive bright colors
+            TileType.CopperOre => new Color(205, 130, 80),
+            TileType.IronOre => new Color(150, 120, 100),
+            TileType.SilverOre => new Color(185, 195, 205),
+            TileType.GoldOre => new Color(255, 215, 0),
+            TileType.CobaltOre => new Color(60, 100, 200),
+            TileType.MythrilOre => new Color(100, 200, 130),
+            TileType.AdamantiteOre => new Color(200, 60, 100),
+            TileType.Hellstone => new Color(255, 90, 30),
+            TileType.DemoniteOre => new Color(120, 80, 180),
+            TileType.CrimtaneOre => new Color(200, 50, 60),
+
+            // Wood & Plants
+            TileType.Wood => new Color(168, 125, 72),
+            TileType.LivingWood => new Color(130, 100, 60),
+            TileType.Leaves => new Color(50, 180, 60),
+            TileType.Cactus => new Color(90, 150, 50),
+            TileType.Mushroom => new Color(200, 170, 140),
+            TileType.GlowingMushroom => new Color(90, 130, 220),
+            TileType.BorealWood => new Color(140, 130, 120),
+            TileType.PalmWood => new Color(180, 140, 90),
+            TileType.RichMahogany => new Color(140, 70, 50),
+            TileType.Ebonwood => new Color(80, 75, 95),
+            TileType.Shadewood => new Color(120, 60, 65),
+            TileType.Pearlwood => new Color(200, 200, 220),
+
+            // Vines
+            TileType.Vines => new Color(40, 140, 50),
+            TileType.JungleVines => new Color(100, 180, 40),
+            TileType.CorruptVines => new Color(90, 80, 140),
+            TileType.CrimsonVines => new Color(150, 50, 55),
+            TileType.HallowedVines => new Color(120, 200, 180),
+
+            // Bricks & Crafted
+            TileType.StoneBrick => new Color(140, 140, 140),
+            TileType.WoodPlatform => new Color(150, 110, 65),
+            TileType.Torch => new Color(255, 200, 80),
+            TileType.GrayBrick => new Color(110, 110, 110),
+            TileType.RedBrick => new Color(170, 80, 70),
+            TileType.DungeonBrick => new Color(65, 75, 105),
+            TileType.CrackedDungeonBrick => new Color(55, 65, 90),
+            TileType.LihzahrdBrick => new Color(180, 130, 50),
+            TileType.Obsidian => new Color(40, 30, 50),
+            TileType.CrystalBlock => new Color(180, 100, 200),
+            TileType.GraniteBlock => new Color(50, 50, 70),
+            TileType.MarbleBlock => new Color(220, 220, 230),
+
+            // Special
+            TileType.Bedrock => new Color(20, 20, 20),
+
+            // Default fallback - magenta for unmapped tiles (easy to spot)
+            _ => Color.Magenta
+        };
     }
 
     /// <summary>

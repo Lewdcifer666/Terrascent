@@ -22,9 +22,9 @@ public class MapManager
     public Vector2 PanOffset { get; private set; } = Vector2.Zero;
     public bool IsOpen { get; set; } = false;
 
-    // Zoom limits
-    public const float MIN_ZOOM = 0.25f;
-    public const float MAX_ZOOM = 4.0f;
+    // Zoom limits - allows zooming in to see individual tiles
+    public const float MIN_ZOOM = 0.1f;   // See entire world
+    public const float MAX_ZOOM = 100.0f;  // See individual pixels at max zoom
     public const float ZOOM_STEP = 0.25f;
 
     // Pan limits (in world tiles)
@@ -95,19 +95,19 @@ public class MapManager
     }
 
     /// <summary>
-    /// Zoom in on the map.
+    /// Zoom in on the map (multiplicative for smooth scaling).
     /// </summary>
     public void ZoomIn()
     {
-        Zoom = Math.Min(Zoom + ZOOM_STEP, MAX_ZOOM);
+        Zoom = Math.Min(Zoom * 1.25f, MAX_ZOOM);
     }
 
     /// <summary>
-    /// Zoom out on the map.
+    /// Zoom out on the map (multiplicative for smooth scaling).
     /// </summary>
     public void ZoomOut()
     {
-        Zoom = Math.Max(Zoom - ZOOM_STEP, MIN_ZOOM);
+        Zoom = Math.Max(Zoom / 1.25f, MIN_ZOOM);
     }
 
     /// <summary>
@@ -157,23 +157,29 @@ public class MapManager
 
     /// <summary>
     /// Convert screen position to world tile position.
+    /// Must match the rendering logic in DrawMap exactly.
     /// </summary>
     public Point ScreenToWorldTile(Vector2 screenPos, Rectangle mapBounds)
     {
-        // Calculate visible world area
-        float visibleWidth = WorldWidth / Zoom;
-        float visibleHeight = WorldHeight / Zoom;
+        // Get visible world bounds (same as DrawMap)
+        Rectangle visibleWorld = GetVisibleWorldBounds();
 
-        // Center point in world
-        float centerX = WorldWidth / 2f + PanOffset.X;
-        float centerY = WorldHeight / 2f + PanOffset.Y;
+        // Calculate scale (same as DrawMap)
+        float scaleX = (float)mapBounds.Width / visibleWorld.Width;
+        float scaleY = (float)mapBounds.Height / visibleWorld.Height;
+        float scale = Math.Min(scaleX, scaleY);
 
-        // Map screen position to world
-        float normalizedX = (screenPos.X - mapBounds.X) / mapBounds.Width;
-        float normalizedY = (screenPos.Y - mapBounds.Y) / mapBounds.Height;
+        // Calculate actual rendered size and offset (same as DrawMap)
+        int renderedWidth = (int)(visibleWorld.Width * scale);
+        int renderedHeight = (int)(visibleWorld.Height * scale);
+        int offsetX = mapBounds.X + (mapBounds.Width - renderedWidth) / 2;
+        int offsetY = mapBounds.Y + (mapBounds.Height - renderedHeight) / 2;
 
-        int worldX = (int)(centerX - visibleWidth / 2 + normalizedX * visibleWidth);
-        int worldY = (int)(centerY - visibleHeight / 2 + normalizedY * visibleHeight);
+        // Convert screen position to world tile
+        // screenX = offsetX + (worldX - visibleWorld.X) * scale
+        // So: worldX = visibleWorld.X + (screenX - offsetX) / scale
+        int worldX = visibleWorld.X + (int)((screenPos.X - offsetX) / scale);
+        int worldY = visibleWorld.Y + (int)((screenPos.Y - offsetY) / scale);
 
         return new Point(
             Math.Clamp(worldX, 0, WorldWidth - 1),
@@ -183,22 +189,29 @@ public class MapManager
 
     /// <summary>
     /// Convert world tile position to screen position.
+    /// Must match the rendering logic in DrawMap exactly.
     /// </summary>
     public Vector2 WorldTileToScreen(Point worldTile, Rectangle mapBounds)
     {
-        float visibleWidth = WorldWidth / Zoom;
-        float visibleHeight = WorldHeight / Zoom;
+        // Get visible world bounds (same as DrawMap)
+        Rectangle visibleWorld = GetVisibleWorldBounds();
 
-        float centerX = WorldWidth / 2f + PanOffset.X;
-        float centerY = WorldHeight / 2f + PanOffset.Y;
+        // Calculate scale (same as DrawMap)
+        float scaleX = (float)mapBounds.Width / visibleWorld.Width;
+        float scaleY = (float)mapBounds.Height / visibleWorld.Height;
+        float scale = Math.Min(scaleX, scaleY);
 
-        float normalizedX = (worldTile.X - (centerX - visibleWidth / 2)) / visibleWidth;
-        float normalizedY = (worldTile.Y - (centerY - visibleHeight / 2)) / visibleHeight;
+        // Calculate actual rendered size and offset (same as DrawMap)
+        int renderedWidth = (int)(visibleWorld.Width * scale);
+        int renderedHeight = (int)(visibleWorld.Height * scale);
+        int offsetX = mapBounds.X + (mapBounds.Width - renderedWidth) / 2;
+        int offsetY = mapBounds.Y + (mapBounds.Height - renderedHeight) / 2;
 
-        return new Vector2(
-            mapBounds.X + normalizedX * mapBounds.Width,
-            mapBounds.Y + normalizedY * mapBounds.Height
-        );
+        // Convert world tile to screen position
+        float screenX = offsetX + (worldTile.X - visibleWorld.X) * scale;
+        float screenY = offsetY + (worldTile.Y - visibleWorld.Y) * scale;
+
+        return new Vector2(screenX, screenY);
     }
 
     /// <summary>
@@ -206,7 +219,21 @@ public class MapManager
     /// </summary>
     private void UpdateHoverInfo(Vector2 mousePosition, Rectangle mapBounds)
     {
-        if (!mapBounds.Contains(mousePosition.ToPoint()))
+        // Calculate actual rendered area (same as DrawMap and ScreenToWorldTile)
+        Rectangle visibleWorld = GetVisibleWorldBounds();
+        float scaleX = (float)mapBounds.Width / visibleWorld.Width;
+        float scaleY = (float)mapBounds.Height / visibleWorld.Height;
+        float scale = Math.Min(scaleX, scaleY);
+
+        int renderedWidth = (int)(visibleWorld.Width * scale);
+        int renderedHeight = (int)(visibleWorld.Height * scale);
+        int offsetX = mapBounds.X + (mapBounds.Width - renderedWidth) / 2;
+        int offsetY = mapBounds.Y + (mapBounds.Height - renderedHeight) / 2;
+
+        Rectangle actualRenderArea = new Rectangle(offsetX, offsetY, renderedWidth, renderedHeight);
+
+        // Check if mouse is within the actual rendered map area
+        if (!actualRenderArea.Contains(mousePosition.ToPoint()))
         {
             HoveredTile = null;
             return;
