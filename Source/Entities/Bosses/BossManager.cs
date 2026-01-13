@@ -39,6 +39,12 @@ public class BossManager
     public event Action<Boss>? OnBossDespawned;
     public event Action<ItemType, int, Vector2>? OnBossItemDropped;
 
+    /// <summary>
+    /// Fired when a hardmode-unlocking boss is defeated (Wall of Shadows).
+    /// Subscribe to this event to trigger hardmode world transformation.
+    /// </summary>
+    public event Action? OnHardmodeTriggered;
+
     public BossManager(DifficultyManager difficulty, DropManager dropManager, EnemyManager enemyManager, int seed)
     {
         _difficulty = difficulty;
@@ -231,8 +237,8 @@ public class BossManager
         // Check for hardmode unlock
         if (boss.Data.UnlocksHardmode)
         {
-            Console.WriteLine("[WORLD] HARDMODE UNLOCKED!");
-            // TODO: Trigger hardmode world transformation
+            Console.WriteLine("[WORLD] HARDMODE UNLOCKED! Triggering world transformation...");
+            OnHardmodeTriggered?.Invoke();
         }
 
         OnBossDefeated?.Invoke(boss);

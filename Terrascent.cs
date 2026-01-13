@@ -18,6 +18,7 @@ using Terrascent.UI;
 using Terrascent.World;
 using Terrascent.World.Biomes;
 using Terrascent.World.Generation;
+using Terrascent.World.Hardmode;
 
 namespace Terrascent;
 
@@ -64,6 +65,10 @@ public class TerrascentGame : Game
     // Map System
     private MapManager _mapManager = null!;
     private MapSystemTest _mapSystemTest = null!;
+
+    // Hardmode System
+    private HardmodeManager _hardmodeManager = null!;
+    private HardmodeUI _hardmodeUI = null!;
 
     // Temp rendering
     private Texture2D _pixelTexture = null!;
@@ -176,6 +181,22 @@ public class TerrascentGame : Game
         // Create map manager
         _mapManager = new MapManager(_worldGenerator, _chunkManager);
 
+        // Load explored chunks if save exists
+        var exploredChunks = _saveManager.LoadExploration();
+        if (exploredChunks != null)
+        {
+            _mapManager.LoadExploredChunks(exploredChunks);
+            System.Diagnostics.Debug.WriteLine($"Loaded {exploredChunks.Count} explored chunks");
+
+            // Load tile color cache
+            var tileColorCache = _saveManager.LoadMapCache();
+            if (tileColorCache != null)
+            {
+                _mapManager.LoadTileColorCache(tileColorCache);
+                System.Diagnostics.Debug.WriteLine($"Loaded {tileColorCache.Count} cached map chunks");
+            }
+        }
+
         // Wire biome manager to enemy manager for biome-aware spawning
         _enemyManager.SetBiomeManager(_biomeManager);
 
@@ -187,6 +208,41 @@ public class TerrascentGame : Game
 
         // Create boss system
         _bossManager = new BossManager(_difficultyManager, _dropManager, _enemyManager, _worldSeed); ;
+
+        // Create hardmode system (after biome manager and boss manager)
+        _hardmodeManager = new HardmodeManager(_chunkManager, _worldGenerator, _biomeManager, _worldSeed);
+
+        // Wire boss defeat to hardmode trigger
+        _bossManager.OnHardmodeTriggered += () =>
+        {
+            System.Diagnostics.Debug.WriteLine("=== HARDMODE TRIGGERED BY BOSS DEFEAT ===");
+            _hardmodeManager.ActivateHardmode();
+            _biomeManager.EnableHardmode();
+        };
+
+        // Subscribe to hardmode events
+        _hardmodeManager.OnHardmodeActivated += () =>
+        {
+            System.Diagnostics.Debug.WriteLine("[HARDMODE] World transformation beginning!");
+        };
+
+        _hardmodeManager.OnTransformationProgress += (status) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[HARDMODE] {status}");
+        };
+
+        _hardmodeManager.OnTransformationComplete += () =>
+        {
+            System.Diagnostics.Debug.WriteLine("[HARDMODE] World transformation COMPLETE!");
+        };
+
+        // Load hardmode state from save if applicable
+        if (_saveManager.LoadedIsHardmode)
+        {
+            System.Diagnostics.Debug.WriteLine("[HARDMODE] Loading saved hardmode state...");
+            _hardmodeManager.SetHardmode(true, skipTransformation: _saveManager.LoadedHasTransformed);
+            _biomeManager.EnableHardmode();
+        }
 
         // Create crafting system
         _craftingManager = new CraftingManager(_player, _bossManager);
@@ -362,6 +418,15 @@ public class TerrascentGame : Game
             _graphics.PreferredBackBufferWidth,
             _graphics.PreferredBackBufferHeight
         );
+
+        // Initialize hardmode UI
+        _hardmodeUI = new HardmodeUI(_hardmodeManager);
+        _hardmodeUI.Initialize(
+            GraphicsDevice,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
+        // Note: SetFont() can be called later if a font becomes available
     }
 
     protected override void Update(GameTime gameTime)
@@ -373,6 +438,12 @@ public class TerrascentGame : Game
         // Update UI first (may consume input)
         _uiManager.Update(deltaTime);
 
+        // Update hardmode UI
+        _hardmodeUI.Update(deltaTime);
+
+        // Update hardmode manager (biome spreading, etc)
+        _hardmodeManager.Update(deltaTime);
+
         // Update endgame map system test
         _mapSystemTest.Update(gameTime, _player.Center, _input);
 
@@ -383,7 +454,9 @@ public class TerrascentGame : Game
         // Save game (F6)
         if (_input.IsKeyPressed(Keys.F6))
         {
-            _saveManager.SaveAll(_worldSeed, _player, _chunkManager);
+            _saveManager.SaveAll(_worldSeed, _player, _chunkManager,
+                _hardmodeManager.IsHardmode, _hardmodeManager.HasTransformed,
+                _mapManager.GetExploredChunks(), _mapManager.GetTileColorCache());
         }
 
         // Regenerate world with new seed (F5) - also deletes save
@@ -412,6 +485,22 @@ public class TerrascentGame : Game
         {
             _showDebugOverlay = !_showDebugOverlay;
             System.Diagnostics.Debug.WriteLine($"Debug Overlay: {(_showDebugOverlay ? "ON" : "OFF")}");
+        }
+
+        // Toggle Hardmode (F9) - DEBUG ONLY
+        if (_input.IsKeyPressed(Keys.F9))
+        {
+            if (!_hardmodeManager.IsHardmode)
+            {
+                // Activate hardmode (will trigger world transformation)
+                _hardmodeManager.ActivateHardmode();
+                _biomeManager.EnableHardmode();
+                System.Diagnostics.Debug.WriteLine("DEBUG: Hardmode ACTIVATED via F9");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("DEBUG: Hardmode already active");
+            }
         }
 
         // Toggle Map (M or F4)
@@ -516,7 +605,9 @@ public class TerrascentGame : Game
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
         // Auto-save on exit
-        _saveManager.SaveAll(_worldSeed, _player, _chunkManager);
+        _saveManager.SaveAll(_worldSeed, _player, _chunkManager,
+            _hardmodeManager.IsHardmode, _hardmodeManager.HasTransformed,
+            _mapManager.GetExploredChunks(), _mapManager.GetTileColorCache());
         base.OnExiting(sender, args);
     }
 
@@ -1063,6 +1154,9 @@ public class TerrascentGame : Game
 
         // Draw UI panels
         _uiManager.Draw(_spriteBatch, _pixelTexture, _input.MousePositionV);
+
+        // Draw hardmode UI (progress bar, notifications, indicator)
+        _hardmodeUI.Draw(_spriteBatch);
 
         // Draw endgame map system test UI
         _mapSystemTest.Draw(_spriteBatch, _pixelTexture, GraphicsDevice.Viewport.Bounds);
@@ -1877,7 +1971,7 @@ public class TerrascentGame : Game
                 // Skip if outside map bounds
                 if (screenY + pixelSize < mapBounds.Y || screenY >= mapBounds.Y + mapBounds.Height) continue;
 
-                // Check fog of war
+                // Check fog of war - is this tile explored?
                 bool explored = _mapManager.IsTileExplored(wx, wy);
 
                 Color tileColor;
@@ -1888,9 +1982,18 @@ public class TerrascentGame : Game
                 }
                 else
                 {
-                    // Get actual tile from chunk manager
-                    var tile = _chunkManager.GetTileAt(wx, wy);
-                    tileColor = GetTileMapColor(tile.Type);
+                    // Try to get from cache first (for unloaded chunks)
+                    Color? cachedColor = _mapManager.GetCachedTileColor(wx, wy);
+                    if (cachedColor.HasValue)
+                    {
+                        tileColor = cachedColor.Value;
+                    }
+                    else
+                    {
+                        // Get live data from chunk manager
+                        var tile = _chunkManager.GetTileAt(wx, wy);
+                        tileColor = GetTileMapColor(tile.Type);
+                    }
                 }
 
                 // Draw the tile

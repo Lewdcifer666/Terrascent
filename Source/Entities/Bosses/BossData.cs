@@ -154,6 +154,11 @@ public class BossData
     public bool HasSegments { get; init; }  // For worm bosses
 
     /// <summary>
+    /// Number of segments for worm-type bosses (e.g., The Destroyer has 82).
+    /// </summary>
+    public int SegmentCount { get; init; } = 0;
+
+    /// <summary>
     /// Get the phase data for a given health percentage.
     /// </summary>
     public BossPhaseData GetPhaseForHealth(float healthPercent)

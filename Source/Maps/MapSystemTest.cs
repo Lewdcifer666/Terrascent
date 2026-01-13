@@ -345,7 +345,7 @@ public class MapSystemTest
 
     private void DrawTestInfo(SpriteBatch spriteBatch, Texture2D pixel)
     {
-        int y = 150;
+        int y = 380;  // Below debug overlay (F3) which ends around y=370
         int x = 10;
 
         // Background

@@ -67,6 +67,19 @@ public class WorldConfig
     /// <summary>True if world has Crimson (false = Corruption).</summary>
     public bool HasCrimson { get; init; }
 
+    // === Hardmode State ===
+    /// <summary>True if the world is in Hardmode (Wall of Shadows defeated).</summary>
+    public bool IsHardmode { get; private set; }
+
+    /// <summary>
+    /// Set the hardmode state. Called when Wall of Shadows is defeated.
+    /// </summary>
+    public void SetHardmode(bool isHardmode)
+    {
+        IsHardmode = isHardmode;
+        System.Diagnostics.Debug.WriteLine($"[WORLDCONFIG] Hardmode set to: {isHardmode}");
+    }
+
     /// <summary>
     /// Create a world configuration for the specified size.
     /// </summary>

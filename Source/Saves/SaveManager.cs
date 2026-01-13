@@ -10,7 +10,7 @@ namespace Terrascent.Saves;
 /// </summary>
 public class SaveManager
 {
-    private const int SAVE_VERSION = 2;  // Updated for XP system
+    private const int SAVE_VERSION = 3;  // Updated for Hardmode system
     private const string WORLD_FILE = "world.dat";
     private const string PLAYER_FILE = "player.dat";
     private const string CHUNKS_FOLDER = "chunks";
@@ -30,6 +30,10 @@ public class SaveManager
     /// </summary>
     public string WorldPath => Path.Combine(SaveDirectory, WorldName);
 
+    // Loaded hardmode state (available after LoadWorldData)
+    public bool LoadedIsHardmode { get; private set; }
+    public bool LoadedHasTransformed { get; private set; }
+
     public SaveManager(string saveDirectory = "Saves")
     {
         // Use AppData for saves
@@ -43,9 +47,9 @@ public class SaveManager
     #region World Data
 
     /// <summary>
-    /// Save world metadata (seed, etc).
+    /// Save world metadata (seed, hardmode state, etc).
     /// </summary>
-    public void SaveWorldData(int seed)
+    public void SaveWorldData(int seed, bool isHardmode = false, bool hasTransformed = false)
     {
         EnsureDirectoryExists(WorldPath);
 
@@ -58,15 +62,24 @@ public class SaveManager
         writer.Write(seed);
         writer.Write(DateTime.UtcNow.ToBinary());
 
-        System.Diagnostics.Debug.WriteLine($"Saved world data: seed={seed}");
+        // Version 3: Hardmode state
+        writer.Write(isHardmode);
+        writer.Write(hasTransformed);
+
+        System.Diagnostics.Debug.WriteLine($"Saved world data: seed={seed}, isHardmode={isHardmode}, hasTransformed={hasTransformed}");
     }
 
     /// <summary>
     /// Load world metadata. Returns seed, or null if no save exists.
+    /// Also sets LoadedIsHardmode and LoadedHasTransformed properties.
     /// </summary>
     public int? LoadWorldData()
     {
         string filePath = Path.Combine(WorldPath, WORLD_FILE);
+
+        // Reset loaded state
+        LoadedIsHardmode = false;
+        LoadedHasTransformed = false;
 
         if (!File.Exists(filePath))
             return null;
@@ -77,7 +90,7 @@ public class SaveManager
             using var reader = new BinaryReader(stream);
 
             int version = reader.ReadInt32();
-            if (version != SAVE_VERSION)
+            if (version < 2 || version > SAVE_VERSION)
             {
                 System.Diagnostics.Debug.WriteLine($"Save version mismatch: {version} != {SAVE_VERSION}");
                 return null;
@@ -87,7 +100,14 @@ public class SaveManager
             long timeBinary = reader.ReadInt64();
             DateTime saveTime = DateTime.FromBinary(timeBinary);
 
-            System.Diagnostics.Debug.WriteLine($"Loaded world data: seed={seed}, saved={saveTime}");
+            // Version 3+: Load hardmode state
+            if (version >= 3)
+            {
+                LoadedIsHardmode = reader.ReadBoolean();
+                LoadedHasTransformed = reader.ReadBoolean();
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Loaded world data: seed={seed}, saved={saveTime}, hardmode={LoadedIsHardmode}, transformed={LoadedHasTransformed}");
             return seed;
         }
         catch (Exception ex)
@@ -340,18 +360,188 @@ public class SaveManager
 
     #endregion
 
+    #region Exploration Data
+
+    private const string EXPLORATION_FILE = "exploration.dat";
+    private const string MAP_CACHE_FILE = "mapcache.dat";
+
+    /// <summary>
+    /// Save explored chunks data and tile color cache.
+    /// </summary>
+    public void SaveExploration(IEnumerable<Point> exploredChunks, Dictionary<Point, int[,]>? tileColorCache = null)
+    {
+        EnsureDirectoryExists(WorldPath);
+        string filePath = Path.Combine(WorldPath, EXPLORATION_FILE);
+
+        var chunks = exploredChunks.ToList();
+
+        using var stream = File.Create(filePath);
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write(SAVE_VERSION);
+        writer.Write(chunks.Count);
+
+        foreach (var chunk in chunks)
+        {
+            writer.Write(chunk.X);
+            writer.Write(chunk.Y);
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Saved exploration data: {chunks.Count} chunks");
+
+        // Save tile color cache separately
+        if (tileColorCache != null)
+        {
+            SaveMapCache(tileColorCache);
+        }
+    }
+
+    /// <summary>
+    /// Save tile color cache to file.
+    /// </summary>
+    private void SaveMapCache(Dictionary<Point, int[,]> cache)
+    {
+        string filePath = Path.Combine(WorldPath, MAP_CACHE_FILE);
+
+        using var stream = File.Create(filePath);
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write(SAVE_VERSION);
+        writer.Write(cache.Count);
+
+        foreach (var kvp in cache)
+        {
+            // Write chunk position
+            writer.Write(kvp.Key.X);
+            writer.Write(kvp.Key.Y);
+
+            // Write 32x32 color array
+            int[,] colors = kvp.Value;
+            for (int x = 0; x < 32; x++)
+            {
+                for (int y = 0; y < 32; y++)
+                {
+                    writer.Write(colors[x, y]);
+                }
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Saved map cache: {cache.Count} chunks");
+    }
+
+    /// <summary>
+    /// Load explored chunks data.
+    /// </summary>
+    public List<Point>? LoadExploration()
+    {
+        string filePath = Path.Combine(WorldPath, EXPLORATION_FILE);
+
+        if (!File.Exists(filePath))
+            return null;
+
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            using var reader = new BinaryReader(stream);
+
+            int version = reader.ReadInt32();
+            if (version < 2 || version > SAVE_VERSION)
+                return null;
+
+            int count = reader.ReadInt32();
+            var chunks = new List<Point>(count);
+
+            for (int i = 0; i < count; i++)
+            {
+                int x = reader.ReadInt32();
+                int y = reader.ReadInt32();
+                chunks.Add(new Point(x, y));
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Loaded exploration data: {chunks.Count} chunks");
+            return chunks;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading exploration: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Load tile color cache from file.
+    /// </summary>
+    public Dictionary<Point, int[,]>? LoadMapCache()
+    {
+        string filePath = Path.Combine(WorldPath, MAP_CACHE_FILE);
+
+        if (!File.Exists(filePath))
+            return null;
+
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            using var reader = new BinaryReader(stream);
+
+            int version = reader.ReadInt32();
+            if (version < 2 || version > SAVE_VERSION)
+                return null;
+
+            int count = reader.ReadInt32();
+            var cache = new Dictionary<Point, int[,]>(count);
+
+            for (int i = 0; i < count; i++)
+            {
+                // Read chunk position
+                int chunkX = reader.ReadInt32();
+                int chunkY = reader.ReadInt32();
+                Point chunkPos = new Point(chunkX, chunkY);
+
+                // Read 32x32 color array
+                int[,] colors = new int[32, 32];
+                for (int x = 0; x < 32; x++)
+                {
+                    for (int y = 0; y < 32; y++)
+                    {
+                        colors[x, y] = reader.ReadInt32();
+                    }
+                }
+
+                cache[chunkPos] = colors;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Loaded map cache: {cache.Count} chunks");
+            return cache;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading map cache: {ex.Message}");
+            return null;
+        }
+    }
+
+    #endregion
+
     #region Full Save/Load
 
     /// <summary>
-    /// Save everything (world + player + chunks).
+    /// Save everything (world + player + chunks + exploration + map cache).
     /// </summary>
-    public void SaveAll(int seed, Player player, ChunkManager chunkManager)
+    public void SaveAll(int seed, Player player, ChunkManager chunkManager,
+                        bool isHardmode = false, bool hasTransformed = false,
+                        IEnumerable<Point>? exploredChunks = null,
+                        Dictionary<Point, int[,]>? tileColorCache = null)
     {
-        SaveWorldData(seed);
+        SaveWorldData(seed, isHardmode, hasTransformed);
         SavePlayer(player);
         SaveAllChunks(chunkManager);
 
-        System.Diagnostics.Debug.WriteLine("=== GAME SAVED ===");
+        if (exploredChunks != null)
+        {
+            SaveExploration(exploredChunks, tileColorCache);
+        }
+
+        System.Diagnostics.Debug.WriteLine($"=== GAME SAVED (Hardmode: {isHardmode}) ===");
     }
 
     /// <summary>

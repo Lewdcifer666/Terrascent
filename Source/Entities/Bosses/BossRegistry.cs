@@ -662,53 +662,646 @@ public static class BossRegistry
 
     private static void RegisterHardmodeBosses()
     {
-        // Placeholder for hardmode bosses
-        // These will be implemented in Phase 4
-
+        // === THE TWINS ===
+        // Dual-boss fight: Retinazer (laser) + Spazmatism (fire)
         Register(new BossData
         {
             Type = BossType.TheTwins,
             Name = "The Twins",
             Title = "have awoken!",
-            BaseHealth = 20000,  // Combined
+            BaseHealth = 24000,  // Combined (12k each)
             BaseDamage = 50,
             BaseSpeed = 150f,
+            BaseDefense = 10,
+            KnockbackResistance = 1f,
             Width = 80,
             Height = 80,
             Movement = BossMovement.HoverDash,
+            EnrageTime = 300f,
+            EnrageMultiplier = 2f,
+            DespawnDistance = 2500f,
+            SpawnCondition = BossSpawnCondition.Nighttime,
             IsHardmode = true,
             Color = (100, 200, 100),
             HealthBarColor = (120, 220, 120),
+            BaseGoldReward = 600,
+            BaseXPReward = 1200,
+
             Phases = new[]
             {
-                new BossPhaseData { Phase = BossPhase.Phase1, HealthThreshold = 1f },
-                new BossPhaseData { Phase = BossPhase.Phase2, HealthThreshold = 0.4f }
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 10
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.4f,
+                    SpeedMultiplier = 1.5f,
+                    AttackSpeedMultiplier = 1.8f,
+                    DamageMultiplier = 1.3f,
+                    Defense = 25  // Armored second form
+                }
             },
-            Attacks = Array.Empty<BossAttack>(),
-            LootTable = Array.Empty<BossLoot>()
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Retinazer Laser",
+                    Damage = 45,
+                    Cooldown = 0.5f,
+                    Range = 600f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 400f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Spazmatism Fireball",
+                    Damage = 50,
+                    Cooldown = 1f,
+                    Range = 400f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 350f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Death Laser",
+                    Damage = 55,
+                    Cooldown = 0.3f,
+                    Range = 700f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 500f,
+                    MinPhase = BossPhase.Phase2
+                },
+                new BossAttack
+                {
+                    Name = "Cursed Flames",
+                    Damage = 60,
+                    Cooldown = 2f,
+                    Range = 300f,
+                    IsAoE = true,
+                    AoERadius = 120f,
+                    MinPhase = BossPhase.Phase2
+                }
+            },
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 6, MaxCount = 10, Guaranteed = true },
+                new BossLoot { Item = ItemType.IronBar, MinCount = 15, MaxCount = 30, DropChance = 0.7f },
+                new BossLoot { Item = ItemType.SilverBar, MinCount = 10, MaxCount = 20, DropChance = 0.6f },
+            }
         });
 
+        // === THE DESTROYER ===
+        // Massive worm boss with 82 segments, spawns probes
         Register(new BossData
         {
             Type = BossType.TheDestroyer,
             Name = "The Destroyer",
             Title = "has awoken!",
-            BaseHealth = 80000,
+            BaseHealth = 80000,  // Highest HP boss
             BaseDamage = 60,
             BaseSpeed = 100f,
-            Width = 40,
+            BaseDefense = 0,  // Body has no defense, head has more
+            KnockbackResistance = 1f,
+            Width = 40,  // Head segment
             Height = 40,
             Movement = BossMovement.Worm,
             HasSegments = true,
+            SegmentCount = 82,
+            EnrageTime = 300f,
+            EnrageMultiplier = 2f,
+            DespawnDistance = 3000f,
+            SpawnCondition = BossSpawnCondition.Nighttime,
             IsHardmode = true,
             Color = (150, 150, 170),
             HealthBarColor = (170, 170, 190),
+            BaseGoldReward = 700,
+            BaseXPReward = 1400,
+
             Phases = new[]
             {
-                new BossPhaseData { Phase = BossPhase.Phase1, HealthThreshold = 1f }
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 0,
+                    SpawnsMinions = true  // Probes spawn from body
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.5f,
+                    SpeedMultiplier = 1.3f,
+                    AttackSpeedMultiplier = 1.5f,
+                    DamageMultiplier = 1.2f,
+                    Defense = 0,
+                    SpawnsMinions = true
+                }
             },
-            Attacks = Array.Empty<BossAttack>(),
-            LootTable = Array.Empty<BossLoot>()
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Body Slam",
+                    Damage = 60,
+                    Cooldown = 0.5f,
+                    Range = 100f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Probe Laser",
+                    Damage = 35,
+                    Cooldown = 2f,
+                    Range = 400f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 350f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Death Laser",
+                    Damage = 45,
+                    Cooldown = 1.5f,
+                    Range = 500f,
+                    IsProjectile = true,
+                    ProjectileCount = 3,
+                    SpreadAngle = 30f,
+                    ProjectileSpeed = 400f,
+                    MinPhase = BossPhase.Phase2
+                }
+            },
+
+            MinionType = EnemyType.Bat,  // Probes
+            MaxMinions = 12,
+            MinionSpawnInterval = 2f,
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 7, MaxCount = 12, Guaranteed = true },
+                new BossLoot { Item = ItemType.IronBar, MinCount = 20, MaxCount = 40, DropChance = 0.75f },
+                new BossLoot { Item = ItemType.GoldBar, MinCount = 10, MaxCount = 20, DropChance = 0.5f },
+            }
+        });
+
+        // === SKELETRON PRIME ===
+        // Mechanical skull with 4 arms (saw, vice, laser, cannon)
+        Register(new BossData
+        {
+            Type = BossType.SkeletronPrime,
+            Name = "Skeletron Prime",
+            Title = "has awoken!",
+            BaseHealth = 28000,
+            BaseDamage = 55,
+            BaseSpeed = 80f,
+            BaseDefense = 24,  // High defense
+            KnockbackResistance = 1f,
+            Width = 100,
+            Height = 100,
+            Movement = BossMovement.HoverDash,
+            EnrageTime = 300f,
+            EnrageMultiplier = 2.5f,  // Very aggressive when enraged
+            DespawnDistance = 2500f,
+            SpawnCondition = BossSpawnCondition.Nighttime,
+            IsHardmode = true,
+            Color = (180, 180, 180),
+            HealthBarColor = (200, 200, 200),
+            BaseGoldReward = 650,
+            BaseXPReward = 1300,
+
+            Phases = new[]
+            {
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 24
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.5f,
+                    SpeedMultiplier = 1.4f,
+                    AttackSpeedMultiplier = 1.6f,
+                    DamageMultiplier = 1.2f,
+                    Defense = 15  // Head becomes vulnerable when spinning
+                }
+            },
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Prime Saw",
+                    Damage = 52,
+                    Cooldown = 1f,
+                    Range = 200f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Prime Vice",
+                    Damage = 45,
+                    Cooldown = 1.2f,
+                    Range = 250f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Prime Cannon",
+                    Damage = 40,
+                    Cooldown = 0.8f,
+                    Range = 500f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 300f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Prime Laser",
+                    Damage = 35,
+                    Cooldown = 0.5f,
+                    Range = 600f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 400f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Skull Spin",
+                    Damage = 70,
+                    Cooldown = 3f,
+                    Range = 150f,
+                    IsAoE = true,
+                    AoERadius = 100f,
+                    MinPhase = BossPhase.Phase2
+                }
+            },
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 6, MaxCount = 11, Guaranteed = true },
+                new BossLoot { Item = ItemType.SilverBar, MinCount = 15, MaxCount = 30, DropChance = 0.7f },
+                new BossLoot { Item = ItemType.GoldBar, MinCount = 8, MaxCount = 18, DropChance = 0.55f },
+            }
+        });
+
+        // === PLANTERA ===
+        // Jungle boss, spawns after all mechanical bosses
+        Register(new BossData
+        {
+            Type = BossType.Plantera,
+            Name = "Plantera",
+            Title = "has awoken!",
+            BaseHealth = 30000,
+            BaseDamage = 50,
+            BaseSpeed = 60f,  // Slow initially
+            BaseDefense = 14,
+            KnockbackResistance = 1f,
+            Width = 120,
+            Height = 120,
+            Movement = BossMovement.HoverDash,
+            EnrageTime = 300f,
+            EnrageMultiplier = 2.5f,  // Enrages if taken out of jungle
+            DespawnDistance = 2000f,
+            SpawnCondition = BossSpawnCondition.Jungle,
+            IsHardmode = true,
+            Color = (150, 220, 100),
+            HealthBarColor = (170, 240, 120),
+            BaseGoldReward = 750,
+            BaseXPReward = 1600,
+
+            Phases = new[]
+            {
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 14
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.5f,
+                    SpeedMultiplier = 1.8f,  // Much faster in phase 2
+                    AttackSpeedMultiplier = 2f,
+                    DamageMultiplier = 1.4f,
+                    Defense = 10,
+                    SpawnsMinions = true  // Tentacles
+                }
+            },
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Thorn Ball",
+                    Damage = 44,
+                    Cooldown = 1f,
+                    Range = 400f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 250f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Seed Shot",
+                    Damage = 36,
+                    Cooldown = 0.6f,
+                    Range = 350f,
+                    IsProjectile = true,
+                    ProjectileCount = 3,
+                    SpreadAngle = 25f,
+                    ProjectileSpeed = 300f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Tentacle Lash",
+                    Damage = 60,
+                    Cooldown = 1.5f,
+                    Range = 250f,
+                    MinPhase = BossPhase.Phase2
+                },
+                new BossAttack
+                {
+                    Name = "Spore Cloud",
+                    Damage = 70,
+                    Cooldown = 2f,
+                    Range = 200f,
+                    IsAoE = true,
+                    AoERadius = 150f,
+                    MinPhase = BossPhase.Phase2
+                }
+            },
+
+            MinionType = EnemyType.Bat,  // Planteras Tentacles
+            MaxMinions = 8,
+            MinionSpawnInterval = 3f,
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 8, MaxCount = 14, Guaranteed = true },
+                new BossLoot { Item = ItemType.Gel, MinCount = 30, MaxCount = 50, DropChance = 0.6f },
+                new BossLoot { Item = ItemType.GoldBar, MinCount = 12, MaxCount = 22, DropChance = 0.65f },
+            }
+        });
+
+        // === GOLEM ===
+        // Temple boss, fought in Lihzahrd Temple
+        Register(new BossData
+        {
+            Type = BossType.Golem,
+            Name = "Golem",
+            Title = "has awoken!",
+            BaseHealth = 39000,
+            BaseDamage = 72,
+            BaseSpeed = 40f,  // Slow but powerful
+            BaseDefense = 26,
+            KnockbackResistance = 1f,
+            Width = 140,
+            Height = 160,
+            Movement = BossMovement.StationaryTeleport,  // Stays in place, teleports
+            EnrageTime = 360f,  // 6 minutes
+            EnrageMultiplier = 1.8f,
+            DespawnDistance = 1500f,
+            SpawnCondition = BossSpawnCondition.Jungle,  // Temple
+            IsHardmode = true,
+            Color = (180, 140, 80),
+            HealthBarColor = (200, 160, 100),
+            BaseGoldReward = 850,
+            BaseXPReward = 1800,
+
+            Phases = new[]
+            {
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 26
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.6f,
+                    SpeedMultiplier = 1.2f,
+                    AttackSpeedMultiplier = 1.4f,
+                    DamageMultiplier = 1.2f,
+                    Defense = 20  // Fists detach
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase3,
+                    HealthThreshold = 0.3f,
+                    SpeedMultiplier = 1.5f,
+                    AttackSpeedMultiplier = 1.8f,
+                    DamageMultiplier = 1.4f,
+                    Defense = 12  // Head detaches and flies
+                }
+            },
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Eye Laser",
+                    Damage = 60,
+                    Cooldown = 0.8f,
+                    Range = 500f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 350f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Fist Slam",
+                    Damage = 72,
+                    Cooldown = 2f,
+                    Range = 200f,
+                    IsAoE = true,
+                    AoERadius = 80f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Fireball Barrage",
+                    Damage = 50,
+                    Cooldown = 1.5f,
+                    Range = 600f,
+                    IsProjectile = true,
+                    ProjectileCount = 4,
+                    SpreadAngle = 45f,
+                    ProjectileSpeed = 280f,
+                    MinPhase = BossPhase.Phase2
+                },
+                new BossAttack
+                {
+                    Name = "Jump Slam",
+                    Damage = 90,
+                    Cooldown = 4f,
+                    Range = 400f,
+                    IsAoE = true,
+                    AoERadius = 120f,
+                    MinPhase = BossPhase.Phase3
+                }
+            },
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 9, MaxCount = 16, Guaranteed = true },
+                new BossLoot { Item = ItemType.GoldBar, MinCount = 15, MaxCount = 30, DropChance = 0.7f },
+                new BossLoot { Item = ItemType.IronBar, MinCount = 25, MaxCount = 45, DropChance = 0.6f },
+            }
+        });
+
+        // === MOON LORD ===
+        // Final boss of the game
+        Register(new BossData
+        {
+            Type = BossType.MoonLord,
+            Name = "Moon Lord",
+            Title = "has awoken!",
+            BaseHealth = 145000,  // Massive HP pool
+            BaseDamage = 100,
+            BaseSpeed = 50f,
+            BaseDefense = 50,
+            KnockbackResistance = 1f,
+            Width = 200,
+            Height = 400,
+            Movement = BossMovement.HoverDash,
+            EnrageTime = 600f,  // 10 minutes
+            EnrageMultiplier = 3f,  // Extreme enrage
+            DespawnDistance = 4000f,
+            SpawnCondition = BossSpawnCondition.None,  // Spawns after Lunar events
+            IsHardmode = true,
+            Color = (100, 150, 200),
+            HealthBarColor = (120, 170, 220),
+            BaseGoldReward = 1500,
+            BaseXPReward = 5000,
+
+            Phases = new[]
+            {
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase1,
+                    HealthThreshold = 1f,
+                    SpeedMultiplier = 1f,
+                    AttackSpeedMultiplier = 1f,
+                    DamageMultiplier = 1f,
+                    Defense = 50,
+                    HasShield = true  // Shield blocks damage
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase2,
+                    HealthThreshold = 0.6f,
+                    SpeedMultiplier = 1.2f,
+                    AttackSpeedMultiplier = 1.5f,
+                    DamageMultiplier = 1.3f,
+                    Defense = 40,
+                    SpawnsMinions = true  // True Eyes of Cthulhu
+                },
+                new BossPhaseData
+                {
+                    Phase = BossPhase.Phase3,
+                    HealthThreshold = 0.3f,
+                    SpeedMultiplier = 1.4f,
+                    AttackSpeedMultiplier = 2f,
+                    DamageMultiplier = 1.5f,
+                    Defense = 30,
+                    SpawnsMinions = true
+                }
+            },
+
+            Attacks = new[]
+            {
+                new BossAttack
+                {
+                    Name = "Phantasmal Eye",
+                    Damage = 80,
+                    Cooldown = 0.5f,
+                    Range = 800f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 400f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Phantasmal Sphere",
+                    Damage = 100,
+                    Cooldown = 2f,
+                    Range = 600f,
+                    IsProjectile = true,
+                    ProjectileCount = 6,
+                    SpreadAngle = 60f,
+                    ProjectileSpeed = 300f,
+                    MinPhase = BossPhase.Phase1
+                },
+                new BossAttack
+                {
+                    Name = "Phantasmal Deathray",
+                    Damage = 150,
+                    Cooldown = 4f,
+                    Range = 1200f,
+                    IsProjectile = true,
+                    ProjectileSpeed = 600f,
+                    MinPhase = BossPhase.Phase2
+                },
+                new BossAttack
+                {
+                    Name = "Moon Bite",
+                    Damage = 120,
+                    Cooldown = 10f,
+                    Range = 400f,
+                    IsAoE = true,
+                    AoERadius = 200f,
+                    MinPhase = BossPhase.Phase2  // Prevents healing
+                },
+                new BossAttack
+                {
+                    Name = "True Eye of Cthulhu",
+                    Damage = 90,
+                    Cooldown = 5f,
+                    Range = 700f,
+                    IsAoE = true,
+                    AoERadius = 100f,
+                    MinPhase = BossPhase.Phase3
+                }
+            },
+
+            MinionType = EnemyType.Demon,  // True Eyes
+            MaxMinions = 3,
+            MinionSpawnInterval = 15f,
+
+            LootTable = new[]
+            {
+                new BossLoot { Item = ItemType.GoldCoin, MinCount = 15, MaxCount = 25, Guaranteed = true },
+                new BossLoot { Item = ItemType.GoldBar, MinCount = 30, MaxCount = 50, DropChance = 1f },
+                new BossLoot { Item = ItemType.SilverBar, MinCount = 40, MaxCount = 60, DropChance = 0.8f },
+            }
         });
     }
 
