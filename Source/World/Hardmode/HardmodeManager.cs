@@ -206,7 +206,8 @@ public class HardmodeManager
     }
 
     /// <summary>
-    /// Generate the Hallow biome as a diagonal stripe across the world.
+    /// Generate the Hallow biome as a diagonal stripe across the world with organic edges.
+    /// Uses 2D noise for natural-looking spread instead of hard stripes.
     /// </summary>
     private void GenerateHallowBiome()
     {
@@ -215,44 +216,54 @@ public class HardmodeManager
         // Hallow spawns opposite to the evil biome
         bool hallowOnLeft = !config.JungleOnLeft;  // Opposite of jungle side typically
 
-        // Calculate stripe parameters
+        // Calculate stripe center and width
         int stripeWidth = config.Width / 8;  // ~12.5% of world width
-        int startX, endX;
+        int centerX;
 
         if (hallowOnLeft)
         {
-            startX = config.Width / 4 - stripeWidth / 2;
-            endX = startX + stripeWidth;
+            centerX = config.Width / 4;
         }
         else
         {
-            startX = config.Width * 3 / 4 - stripeWidth / 2;
-            endX = startX + stripeWidth;
+            centerX = config.Width * 3 / 4;
         }
 
-        System.Diagnostics.Debug.WriteLine($"[HARDMODE] Generating Hallow from X={startX} to X={endX}");
+        // Expand processing area to allow noise-based edges
+        int processStartX = centerX - stripeWidth;
+        int processEndX = centerX + stripeWidth;
 
-        // Generate the Hallow stripe
-        var perlin = new PerlinNoise(_random.Next());
+        System.Diagnostics.Debug.WriteLine($"[HARDMODE] Generating Hallow centered at X={centerX}, width={stripeWidth}");
 
-        for (int worldX = startX; worldX < endX; worldX++)
+        // Use 2D noise for organic spread
+        var spreadNoise = new PerlinNoise(_random.Next());
+        var detailNoise = new PerlinNoise(_random.Next() + 1000);
+
+        for (int worldX = processStartX; worldX < processEndX; worldX++)
         {
-            // Add some noise to the edges for natural look
-            float edgeNoise = perlin.Noise(worldX * 0.02f, 0) * 20;
-            int effectiveX = worldX + (int)edgeNoise;
-
-            if (effectiveX < startX || effectiveX >= endX)
-                continue;
-
-            // Convert tiles from surface to underworld
             for (int worldY = config.SurfaceLevel - 30; worldY < config.UnderworldBoundary; worldY++)
             {
-                // Add vertical variation
-                float vNoise = perlin.Noise(worldX * 0.03f, worldY * 0.03f);
-                if (Math.Abs(worldX - (startX + endX) / 2) > stripeWidth / 2 - 10 && vNoise < -0.3f)
-                    continue;
+                // Calculate distance from stripe center (0 at center, 1 at edge)
+                float distanceFromCenter = Math.Abs(worldX - centerX) / (float)(stripeWidth / 2);
 
-                HallowifyTile(effectiveX, worldY);
+                // Use 2D noise to create organic edge (different noise at different Y positions)
+                float edgeNoise = spreadNoise.Noise(worldX * 0.015f, worldY * 0.008f) * 0.5f + 0.5f; // 0 to 1
+                float detailVar = detailNoise.Noise(worldX * 0.05f, worldY * 0.03f) * 0.3f; // -0.3 to 0.3
+
+                // Combine distance and noise to determine if this tile should be hallowed
+                // Core (distanceFromCenter < 0.5) is always hallowed
+                // Edge zone (0.5 to 1.0) uses noise for organic transition
+                float threshold = distanceFromCenter + detailVar;
+
+                // Add depth-based variation (deeper = slightly wider spread)
+                float depthFactor = (worldY - config.SurfaceLevel) / (float)(config.UnderworldBoundary - config.SurfaceLevel);
+                threshold -= depthFactor * 0.15f;
+
+                // If within threshold (accounting for noise), hallowify
+                if (threshold < 0.85f + edgeNoise * 0.3f)
+                {
+                    HallowifyTile(worldX, worldY);
+                }
             }
         }
     }
@@ -300,61 +311,69 @@ public class HardmodeManager
     }
 
     /// <summary>
-    /// Expand the evil biome (Corruption/Crimson).
-    /// Creates additional V-shaped evil spread.
+    /// Expand the evil biome (Corruption/Crimson) with organic noise-based edges.
+    /// Creates natural-looking evil spread instead of hard stripes.
     /// </summary>
     private void ExpandEvilBiome()
     {
         var config = _worldGenerator.Config;
 
-        // The evil biome expands in a V-shape from spawn
+        // The evil biome expands from spawn area
         int centerX = config.Width / 2;
 
         // Direction opposite to Hallow
         bool expandLeft = config.JungleOnLeft;
 
         int stripeWidth = config.Width / 10;
-        int startX, endX;
+        int stripeCenterX;
 
         if (expandLeft)
         {
-            endX = centerX - config.Width / 8;
-            startX = endX - stripeWidth;
+            stripeCenterX = centerX - config.Width / 6;
         }
         else
         {
-            startX = centerX + config.Width / 8;
-            endX = startX + stripeWidth;
+            stripeCenterX = centerX + config.Width / 6;
         }
 
-        // Ensure bounds
-        startX = Math.Max(config.OceanWidth + 50, startX);
-        endX = Math.Min(config.Width - config.OceanWidth - 50, endX);
+        // Expand processing area
+        int processStartX = Math.Max(config.OceanWidth + 50, stripeCenterX - stripeWidth);
+        int processEndX = Math.Min(config.Width - config.OceanWidth - 50, stripeCenterX + stripeWidth);
 
-        System.Diagnostics.Debug.WriteLine($"[HARDMODE] Expanding evil biome from X={startX} to X={endX}");
+        System.Diagnostics.Debug.WriteLine($"[HARDMODE] Expanding evil biome centered at X={stripeCenterX}");
 
         TileType evilStone = config.HasCrimson ? TileType.Crimstone : TileType.Ebonstone;
         TileType evilGrass = config.HasCrimson ? TileType.CrimsonGrass : TileType.CorruptGrass;
         TileType evilSand = config.HasCrimson ? TileType.CrimsonSand : TileType.CorruptSand;
         TileType evilIce = config.HasCrimson ? TileType.CrimsonIce : TileType.CorruptIce;
 
-        var perlin = new PerlinNoise(_random.Next());
+        // Use 2D noise for organic spread
+        var spreadNoise = new PerlinNoise(_random.Next());
+        var detailNoise = new PerlinNoise(_random.Next() + 2000);
 
-        for (int worldX = startX; worldX < endX; worldX++)
+        for (int worldX = processStartX; worldX < processEndX; worldX++)
         {
-            float edgeNoise = perlin.Noise(worldX * 0.02f, 0.5f) * 15;
-            int effectiveX = worldX + (int)edgeNoise;
-
-            if (effectiveX < startX || effectiveX >= endX)
-                continue;
-
             for (int worldY = config.SurfaceLevel - 30; worldY < config.UnderworldBoundary; worldY++)
             {
-                float vNoise = perlin.Noise(worldX * 0.03f, worldY * 0.03f);
-                if (Math.Abs(worldX - (startX + endX) / 2) > stripeWidth / 2 - 10 && vNoise < -0.3f)
-                    continue;
+                // Calculate distance from stripe center
+                float distanceFromCenter = Math.Abs(worldX - stripeCenterX) / (float)(stripeWidth / 2);
 
-                CorruptTile(effectiveX, worldY, evilStone, evilGrass, evilSand, evilIce);
+                // Use 2D noise for organic edge
+                float edgeNoise = spreadNoise.Noise(worldX * 0.012f, worldY * 0.006f) * 0.5f + 0.5f;
+                float detailVar = detailNoise.Noise(worldX * 0.04f, worldY * 0.025f) * 0.35f;
+
+                // Combine distance and noise
+                float threshold = distanceFromCenter + detailVar;
+
+                // Depth variation (evil spreads deeper more aggressively)
+                float depthFactor = (worldY - config.SurfaceLevel) / (float)(config.UnderworldBoundary - config.SurfaceLevel);
+                threshold -= depthFactor * 0.2f;
+
+                // If within threshold, corrupt
+                if (threshold < 0.8f + edgeNoise * 0.35f)
+                {
+                    CorruptTile(worldX, worldY, evilStone, evilGrass, evilSand, evilIce);
+                }
             }
         }
     }

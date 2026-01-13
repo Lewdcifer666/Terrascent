@@ -345,9 +345,32 @@ public class WorldGenerator
 
         WorldLayer layer = Config.GetLayerAt(worldY);
 
-        // Underworld generation
-        if (layer == WorldLayer.Underworld)
+        // === CAVERN to UNDERWORLD TRANSITION ===
+        // Create a gradual blend zone at the boundary
+        int transitionStart = Config.UnderworldBoundary - 80;  // Start blending 80 tiles before underworld
+        int transitionEnd = Config.UnderworldBoundary + 30;    // End blending 30 tiles into underworld
+
+        if (worldY >= transitionStart && worldY <= transitionEnd)
         {
+            // Calculate blend factor (0 = cavern, 1 = underworld)
+            float blendFactor = (worldY - transitionStart) / (float)(transitionEnd - transitionStart);
+
+            // Use noise to create organic transition boundary
+            float transitionNoise = _biomeNoise.Noise01(worldX * 0.03f + 8000, worldY * 0.02f);
+
+            // Adjust blend factor with noise for jagged natural edge
+            float adjustedBlend = blendFactor + (transitionNoise - 0.5f) * 0.4f;
+
+            if (adjustedBlend > 0.5f)
+            {
+                // Underworld tile
+                return GetUnderworldTile(worldX, worldY, depth);
+            }
+            // Otherwise continue to cavern generation below
+        }
+        else if (layer == WorldLayer.Underworld)
+        {
+            // Fully in underworld
             return GetUnderworldTile(worldX, worldY, depth);
         }
 

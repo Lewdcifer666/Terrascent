@@ -16,11 +16,15 @@ public class MapManager
 
     // Explored tiles tracking (for fog of war)
     private readonly HashSet<Point> _exploredChunks = new();
-    private const int EXPLORE_RADIUS = 5;  // Chunks around player that get explored (5 * 32 = 160 tiles)
+    private const int EXPLORE_RADIUS = 15;  // Chunks around player that get explored (15 * 32 = 480 tiles)
 
     // Tile color cache - stores packed RGB values for each explored tile
     // Key: chunk position, Value: 32x32 array of packed colors (RGB as int)
     private readonly Dictionary<Point, int[,]> _tileColorCache = new();
+
+    // Tile type cache - stores tile types for explored tiles (for hover info when chunk unloaded)
+    // Key: chunk position, Value: 32x32 array of TileType values
+    private readonly Dictionary<Point, TileType[,]> _tileTypeCache = new();
 
     // Map view state
     public float Zoom { get; private set; } = 1.0f;
@@ -91,7 +95,7 @@ public class MapManager
     }
 
     /// <summary>
-    /// Try to cache tile colors for a chunk. Only succeeds if chunk is loaded.
+    /// Try to cache tile colors and types for a chunk. Only succeeds if chunk is loaded.
     /// </summary>
     private bool TryCacheChunkColors(Point chunkPos)
     {
@@ -101,6 +105,7 @@ public class MapManager
             return false;  // Chunk not loaded, can't cache yet
 
         int[,] colors = new int[Chunk.SIZE, Chunk.SIZE];
+        TileType[,] types = new TileType[Chunk.SIZE, Chunk.SIZE];
 
         int baseX = chunkPos.X * Chunk.SIZE;
         int baseY = chunkPos.Y * Chunk.SIZE;
@@ -113,10 +118,12 @@ public class MapManager
                 var tile = chunk.GetTile(lx, ly);
                 Color tileColor = GetTileMapColor(tile.Type);
                 colors[lx, ly] = PackColor(tileColor);
+                types[lx, ly] = tile.Type;
             }
         }
 
         _tileColorCache[chunkPos] = colors;
+        _tileTypeCache[chunkPos] = types;
         return true;
     }
 
@@ -150,6 +157,31 @@ public class MapManager
         if (localX >= 0 && localX < Chunk.SIZE && localY >= 0 && localY < Chunk.SIZE)
         {
             return UnpackColor(colors[localX, localY]);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Get cached tile type for a world position.
+    /// Returns null if no cached type is available.
+    /// </summary>
+    public TileType? GetCachedTileType(int worldX, int worldY)
+    {
+        int chunkX = worldX / Chunk.SIZE;
+        int chunkY = worldY / Chunk.SIZE;
+        Point chunkPos = new Point(chunkX, chunkY);
+
+        // Check if we have cached types for this chunk
+        if (!_tileTypeCache.TryGetValue(chunkPos, out var types))
+            return null;
+
+        int localX = worldX - (chunkX * Chunk.SIZE);
+        int localY = worldY - (chunkY * Chunk.SIZE);
+
+        if (localX >= 0 && localX < Chunk.SIZE && localY >= 0 && localY < Chunk.SIZE)
+        {
+            return types[localX, localY];
         }
 
         return null;
@@ -427,8 +459,27 @@ public class MapManager
         // Get tile info
         if (IsTileExplored(worldTile.X, worldTile.Y))
         {
+            // First try to get live tile data from loaded chunk
             var tile = _chunkManager.GetTileAt(worldTile);
-            HoveredTileType = tile.Type;
+
+            // If chunk is unloaded (returns Air), try cached tile type
+            if (tile.Type == TileType.Air)
+            {
+                var cachedType = GetCachedTileType(worldTile.X, worldTile.Y);
+                if (cachedType.HasValue)
+                {
+                    HoveredTileType = cachedType.Value;
+                }
+                else
+                {
+                    HoveredTileType = TileType.Air;  // Actually air or not cached
+                }
+            }
+            else
+            {
+                HoveredTileType = tile.Type;
+            }
+
             HoveredBiome = _worldGenerator.GetSurfaceBiome(worldTile.X);
             HoveredLayer = _worldGenerator.Config.GetLayerAt(worldTile.Y);
 
@@ -498,12 +549,13 @@ public class MapManager
     }
 
     /// <summary>
-    /// Clear exploration data and cached colors.
+    /// Clear exploration data and cached colors/types.
     /// </summary>
     public void ClearExploration()
     {
         _exploredChunks.Clear();
         _tileColorCache.Clear();
+        _tileTypeCache.Clear();
     }
 
     /// <summary>
@@ -544,6 +596,26 @@ public class MapManager
         foreach (var kvp in cache)
         {
             _tileColorCache[kvp.Key] = kvp.Value;
+        }
+    }
+
+    /// <summary>
+    /// Get tile type cache for saving.
+    /// </summary>
+    public Dictionary<Point, TileType[,]> GetTileTypeCache()
+    {
+        return _tileTypeCache;
+    }
+
+    /// <summary>
+    /// Load tile type cache from save data.
+    /// </summary>
+    public void LoadTileTypeCache(Dictionary<Point, TileType[,]> cache)
+    {
+        _tileTypeCache.Clear();
+        foreach (var kvp in cache)
+        {
+            _tileTypeCache[kvp.Key] = kvp.Value;
         }
     }
 }

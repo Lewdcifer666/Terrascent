@@ -66,7 +66,7 @@ public class Player : Entity
     // === DEBUG FLAGS ===
     public bool GodMode { get; set; } = false;
     public bool Noclip { get; set; } = false;
-    private const float NOCLIP_SPEED = 500f;  // Fast movement when noclipping
+    private const float NOCLIP_SPEED = 1000f;  // Fast movement when noclipping (doubled for better exploration)
 
     // Health regeneration
     private float _regenTimer;
