@@ -674,6 +674,46 @@ public static class TileRegistry
             Color = (180, 40, 60),
         },
 
+        // === HARDMODE ORES ===
+        [TileType.CobaltOre] = new TileProperties
+        {
+            Name = "Cobalt Ore",
+            IsSolid = true,
+            BlocksLight = true,
+            MiningTime = 140,
+            PickaxeRequired = 100, // Requires Molten Pickaxe or better
+            LightEmission = 0,
+            AffectedByGravity = false,
+            CanMerge = false,
+            Color = (60, 120, 200),
+        },
+
+        [TileType.MythrilOre] = new TileProperties
+        {
+            Name = "Mythril Ore",
+            IsSolid = true,
+            BlocksLight = true,
+            MiningTime = 160,
+            PickaxeRequired = 110, // Requires Cobalt/Palladium Pickaxe or better
+            LightEmission = 0,
+            AffectedByGravity = false,
+            CanMerge = false,
+            Color = (100, 200, 150),
+        },
+
+        [TileType.AdamantiteOre] = new TileProperties
+        {
+            Name = "Adamantite Ore",
+            IsSolid = true,
+            BlocksLight = true,
+            MiningTime = 180,
+            PickaxeRequired = 150, // Requires Mythril/Orichalcum Pickaxe or better
+            LightEmission = 0,
+            AffectedByGravity = false,
+            CanMerge = false,
+            Color = (200, 80, 80),
+        },
+
         // === WOOD & PLANTS ===
         [TileType.Wood] = new TileProperties
         {

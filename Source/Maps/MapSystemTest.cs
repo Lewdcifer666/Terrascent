@@ -14,6 +14,7 @@ namespace Terrascent.Maps;
 /// Press NumPad2 to give test maps and currency.
 /// Press NumPad3 to open/close the Map Device UI (when near a device).
 /// Press NumPad4 to simulate a map drop.
+/// Press NumPad5 to toggle Hardmode.
 /// </summary>
 public class MapSystemTest
 {
@@ -348,8 +349,8 @@ public class MapSystemTest
         int y = 380;  // Below debug overlay (F3) which ends around y=370
         int x = 10;
 
-        // Background
-        spriteBatch.Draw(pixel, new Rectangle(x - 5, y - 5, 220, 130), new Color(0, 0, 0, 180));
+        // Background - make it taller to fit NumPad5
+        spriteBatch.Draw(pixel, new Rectangle(x - 5, y - 5, 220, 145), new Color(0, 0, 0, 180));
 
         // Use InventoryUI.DrawText for pixel-based rendering
         InventoryUI.DrawText(spriteBatch, pixel, "=== MAP SYSTEM TEST ===", x, y, Color.Yellow);
@@ -361,6 +362,8 @@ public class MapSystemTest
         InventoryUI.DrawText(spriteBatch, pixel, "NumPad3 - Open/Close Device UI", x, y, Color.White);
         y += 14;
         InventoryUI.DrawText(spriteBatch, pixel, "NumPad4 - Simulate Map Drop", x, y, Color.White);
+        y += 14;
+        InventoryUI.DrawText(spriteBatch, pixel, "NumPad5 - Toggle Hardmode", x, y, Color.Magenta);
         y += 18;
 
         // Get device count via the GetDevices() method

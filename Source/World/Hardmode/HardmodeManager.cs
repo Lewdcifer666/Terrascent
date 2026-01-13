@@ -178,12 +178,15 @@ public class HardmodeManager
             int x = centerX + (int)(MathF.Cos(angle) * distance);
             int y = centerY + (int)(MathF.Sin(angle) * distance);
 
-            // Get the chunk
+            // Get the chunk - use GetOrCreateChunk to load/generate chunks that aren't loaded yet
             int chunkX = x / Chunk.SIZE;
             int chunkY = y / Chunk.SIZE;
 
-            var chunk = _chunkManager.GetChunk(chunkX, chunkY);
-            if (chunk == null) continue;
+            // Bounds check to avoid generating chunks outside world
+            if (x < 0 || x >= _worldGenerator.Config.Width || y < 0 || y >= _worldGenerator.Config.Height)
+                continue;
+
+            var chunk = _chunkManager.GetOrCreateChunk(chunkX, chunkY);
 
             int localX = x - chunkX * Chunk.SIZE;
             int localY = y - chunkY * Chunk.SIZE;
@@ -259,11 +262,16 @@ public class HardmodeManager
     /// </summary>
     private void HallowifyTile(int worldX, int worldY)
     {
+        // Bounds check
+        if (worldX < 0 || worldX >= _worldGenerator.Config.Width ||
+            worldY < 0 || worldY >= _worldGenerator.Config.Height)
+            return;
+
         int chunkX = worldX / Chunk.SIZE;
         int chunkY = worldY / Chunk.SIZE;
 
-        var chunk = _chunkManager.GetChunk(chunkX, chunkY);
-        if (chunk == null) return;
+        // Use GetOrCreateChunk to load/generate chunks that aren't loaded yet
+        var chunk = _chunkManager.GetOrCreateChunk(chunkX, chunkY);
 
         int localX = worldX - chunkX * Chunk.SIZE;
         int localY = worldY - chunkY * Chunk.SIZE;
@@ -357,11 +365,16 @@ public class HardmodeManager
     private void CorruptTile(int worldX, int worldY, TileType evilStone, TileType evilGrass,
                             TileType evilSand, TileType evilIce)
     {
+        // Bounds check
+        if (worldX < 0 || worldX >= _worldGenerator.Config.Width ||
+            worldY < 0 || worldY >= _worldGenerator.Config.Height)
+            return;
+
         int chunkX = worldX / Chunk.SIZE;
         int chunkY = worldY / Chunk.SIZE;
 
-        var chunk = _chunkManager.GetChunk(chunkX, chunkY);
-        if (chunk == null) return;
+        // Use GetOrCreateChunk to load/generate chunks that aren't loaded yet
+        var chunk = _chunkManager.GetOrCreateChunk(chunkX, chunkY);
 
         int localX = worldX - chunkX * Chunk.SIZE;
         int localY = worldY - chunkY * Chunk.SIZE;
@@ -449,7 +462,27 @@ public class HardmodeManager
         {
             _hasTransformed = true;
         }
+        else
+        {
+            // Reset transformation state when disabling hardmode
+            _hasTransformed = false;
+            _isTransforming = false;
+            _transformationStep = 0;
+        }
 
         _worldGenerator.Config?.SetHardmode(isHardmode);
+    }
+
+    /// <summary>
+    /// Reset hardmode state for a new game/world.
+    /// </summary>
+    public void Reset()
+    {
+        _isHardmode = false;
+        _hasTransformed = false;
+        _isTransforming = false;
+        _transformationStep = 0;
+        _worldGenerator.Config?.SetHardmode(false);
+        System.Diagnostics.Debug.WriteLine("[HARDMODE] Reset to pre-hardmode state");
     }
 }

@@ -623,6 +623,32 @@ public class Player : Entity
         ExecuteJump();
     }
 
+    /// <summary>
+    /// Reset all progression (XP, Level, Upgrades) for a new game.
+    /// </summary>
+    public void ResetProgression()
+    {
+        // Reset XP and level
+        XP.Reset();
+
+        // Reset level-up system and selected upgrades
+        LevelUp.Reset();
+
+        // Recalculate stats with no upgrades
+        UpgradeStats.Recalculate();
+
+        // Apply the reset stats
+        XP.XPMultiplier = 1f + UpgradeStats.XPGain; // Should be 1.0 after reset
+
+        // Update max health with reset stats
+        UpdateMaxHealth();
+
+        // Reset health to full
+        CurrentHealth = MaxHealth;
+
+        System.Diagnostics.Debug.WriteLine($"[PLAYER] Progression reset - Level {XP.Level}, MaxHealth {MaxHealth}");
+    }
+
     public void SpawnAt(int tileX, int surfaceY)
     {
         _spawnPoint = new Point(tileX, surfaceY);

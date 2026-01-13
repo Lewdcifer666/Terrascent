@@ -487,15 +487,17 @@ public class TerrascentGame : Game
             System.Diagnostics.Debug.WriteLine($"Debug Overlay: {(_showDebugOverlay ? "ON" : "OFF")}");
         }
 
-        // Toggle Hardmode (F9) - DEBUG ONLY
-        if (_input.IsKeyPressed(Keys.F9))
+        // Toggle Hardmode (NumPad5) - DEBUG ONLY
+        if (_input.IsKeyPressed(Keys.NumPad5))
         {
+            _input.ConsumeKeyPress(Keys.NumPad5);
+
             if (!_hardmodeManager.IsHardmode)
             {
                 // Activate hardmode (will trigger world transformation)
                 _hardmodeManager.ActivateHardmode();
                 _biomeManager.EnableHardmode();
-                System.Diagnostics.Debug.WriteLine("DEBUG: Hardmode ACTIVATED via F9");
+                System.Diagnostics.Debug.WriteLine("DEBUG: Hardmode ACTIVATED via NumPad5");
             }
             else
             {
@@ -642,6 +644,9 @@ public class TerrascentGame : Game
         _player.Inventory.AddItem(ItemType.PaulsGoatHoofItem, 2);
         _player.Inventory.AddItem(ItemType.CritGlassesItem, 5);
 
+        // Reset player progression (XP, Level, Upgrades, Health)
+        _player.ResetProgression();
+
         // Reset economy
         _player.Currency.SetGold(100);
         _difficultyManager.Reset();
@@ -657,6 +662,28 @@ public class TerrascentGame : Game
         _biomeManager = new BiomeManager(_chunkManager, _worldSeed);
         _biomeManager.SetWorldConfig(_worldGenerator.Config);
         _enemyManager.SetBiomeManager(_biomeManager);
+
+        // Recreate hardmode manager with new world (reset hardmode state)
+        _hardmodeManager = new HardmodeManager(_chunkManager, _worldGenerator, _biomeManager, _worldSeed);
+
+        // Re-wire hardmode events
+        _hardmodeManager.OnHardmodeActivated += () =>
+        {
+            System.Diagnostics.Debug.WriteLine("=== HARDMODE EVENTS WIRED ===");
+        };
+        _hardmodeManager.OnTransformationProgress += (status) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[HARDMODE PROGRESS] {status}");
+        };
+        _hardmodeManager.OnTransformationComplete += () =>
+        {
+            System.Diagnostics.Debug.WriteLine("=== HARDMODE TRANSFORMATION COMPLETE ===");
+        };
+
+        // Recreate hardmode UI with new manager
+        _hardmodeUI = new HardmodeUI(_hardmodeManager);
+        _hardmodeUI.Initialize(GraphicsDevice, _graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
+        System.Diagnostics.Debug.WriteLine("Hardmode reset (pre-hardmode state)");
 
         // Recreate map manager with new world
         _mapManager = new MapManager(_worldGenerator, _chunkManager);
@@ -676,6 +703,8 @@ public class TerrascentGame : Game
 
         System.Diagnostics.Debug.WriteLine($"Regenerated world with seed: {_worldSeed}");
         System.Diagnostics.Debug.WriteLine($"  Player spawned at X={spawnX} (world center)");
+        System.Diagnostics.Debug.WriteLine($"  Player Level: {_player.XP.Level}, XP: {_player.XP.CurrentXP}");
+        System.Diagnostics.Debug.WriteLine($"  Hardmode: {_hardmodeManager.IsHardmode}");
     }
 
     private void FixedUpdate()
